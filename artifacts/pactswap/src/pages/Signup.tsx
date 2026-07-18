@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useLocation, Link } from "wouter";
 import { useAuth } from "@/contexts/AuthContext";
 import { Button } from "@/components/ui/button";
@@ -7,12 +7,9 @@ import { Label } from "@/components/ui/label";
 import { toast } from "sonner";
 import { Loader2, Wallet, ArrowRight, ShieldCheck, AlertTriangle, RefreshCw } from "lucide-react";
 
-// Direct fetch helpers — new signup-specific endpoints
-const API = (path: string) => path; // relative paths work via Replit routing
-
 async function apiPost(path: string, body: object) {
   const token = localStorage.getItem("pactswap_token");
-  const res = await fetch(API(path), {
+  const res = await fetch(path, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
@@ -24,6 +21,8 @@ async function apiPost(path: string, body: object) {
   if (!res.ok) throw Object.assign(new Error(data?.error ?? "Request failed"), { data });
   return data;
 }
+
+const RESEND_COOLDOWN = 60; // seconds
 
 export default function Signup() {
   const [, setLocation] = useLocation();
@@ -39,6 +38,26 @@ export default function Signup() {
   const [blockedUntil, setBlockedUntil] = useState<Date | null>(null);
   const [sendLoading, setSendLoading] = useState(false);
   const [verifyLoading, setVerifyLoading] = useState(false);
+
+  // Resend cooldown
+  const [cooldown, setCooldown] = useState(0);
+  const cooldownRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  const startCooldown = () => {
+    setCooldown(RESEND_COOLDOWN);
+    if (cooldownRef.current) clearInterval(cooldownRef.current);
+    cooldownRef.current = setInterval(() => {
+      setCooldown(prev => {
+        if (prev <= 1) {
+          clearInterval(cooldownRef.current!);
+          return 0;
+        }
+        return prev - 1;
+      });
+    }, 1000);
+  };
+
+  useEffect(() => () => { if (cooldownRef.current) clearInterval(cooldownRef.current); }, []);
 
   const handleConnectWallet = async () => {
     try {
@@ -56,8 +75,8 @@ export default function Signup() {
     }
   };
 
-  const handleSendOtp = async (e: React.FormEvent) => {
-    e.preventDefault();
+  // Core send logic — shared by first-send and resend
+  const sendOtp = async () => {
     if (!walletAddress || !email || !name) {
       toast.error("Please fill in all fields.");
       return;
@@ -68,15 +87,45 @@ export default function Signup() {
       if (data?.devCode) {
         setDevCode(data.devCode);
         setOtp(data.devCode);
-        toast.info("Code pre-filled — Resend not configured in this environment.");
+        toast.info(`Dev mode — code pre-filled: ${data.devCode}`);
       } else {
         toast.success("Verification code sent! Check your inbox.");
       }
       setAttemptsLeft(3);
       setBlockedUntil(null);
+      setOtp("");
+      startCooldown();
       setStep(2);
     } catch (err: any) {
       toast.error(err?.data?.error ?? err.message ?? "Failed to send code.");
+    } finally {
+      setSendLoading(false);
+    }
+  };
+
+  const handleFormSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    sendOtp();
+  };
+
+  const handleResend = async () => {
+    if (cooldown > 0 || sendLoading) return;
+    setSendLoading(true);
+    try {
+      const data = await apiPost("/api/auth/send-signup-otp", { email, walletAddress, name });
+      if (data?.devCode) {
+        setDevCode(data.devCode);
+        setOtp(data.devCode);
+        toast.info(`Dev mode — new code pre-filled: ${data.devCode}`);
+      } else {
+        toast.success("New code sent! Check your inbox.");
+      }
+      setAttemptsLeft(3);
+      setBlockedUntil(null);
+      setOtp("");
+      startCooldown();
+    } catch (err: any) {
+      toast.error(err?.data?.error ?? err.message ?? "Failed to resend code.");
     } finally {
       setSendLoading(false);
     }
@@ -96,10 +145,7 @@ export default function Signup() {
     setVerifyLoading(true);
     try {
       const data = await apiPost("/api/auth/verify-signup-otp", {
-        email,
-        code: otp,
-        walletAddress,
-        name,
+        email, code: otp, walletAddress, name,
       });
       toast.success("Account created! Welcome to PACTSWAP.");
       login(data.token, data.user.walletAddress);
@@ -109,17 +155,16 @@ export default function Signup() {
       if (errData?.attemptsLeft !== undefined) {
         setAttemptsLeft(errData.attemptsLeft);
         if (errData.attemptsLeft === 0) {
-          const until = new Date(Date.now() + 5 * 60 * 1000);
-          setBlockedUntil(until);
+          setBlockedUntil(new Date(Date.now() + 5 * 60 * 1000));
           toast.error("Too many wrong attempts. Blocked for 5 minutes.");
         } else {
-          toast.error(`Wrong code. ${errData.attemptsLeft} attempt${errData.attemptsLeft === 1 ? "" : "s"} remaining.`);
+          toast.error(`Wrong code — ${errData.attemptsLeft} attempt${errData.attemptsLeft === 1 ? "" : "s"} remaining.`);
         }
       } else if (errData?.blockedUntil) {
         const until = new Date(errData.blockedUntil);
         setBlockedUntil(until);
         const mins = Math.ceil((until.getTime() - Date.now()) / 60000);
-        toast.error(`Account temporarily blocked. Try again in ${mins} minute${mins === 1 ? "" : "s"}.`);
+        toast.error(`Blocked. Try again in ${mins} minute${mins === 1 ? "" : "s"}.`);
       } else {
         toast.error(errData?.error ?? err.message ?? "Verification failed.");
       }
@@ -128,7 +173,7 @@ export default function Signup() {
     }
   };
 
-  const isBlocked = blockedUntil !== null && new Date() < blockedUntil;
+  const isBlocked = !!blockedUntil && new Date() < blockedUntil;
   const blockedMins = blockedUntil ? Math.ceil((blockedUntil.getTime() - Date.now()) / 60000) : 0;
 
   return (
@@ -140,8 +185,7 @@ export default function Signup() {
         </div>
 
         {step === 1 ? (
-          <form onSubmit={handleSendOtp} className="space-y-5">
-            {/* Wallet */}
+          <form onSubmit={handleFormSubmit} className="space-y-5">
             <div className="space-y-2">
               <Label>Web3 Wallet</Label>
               {walletAddress ? (
@@ -161,7 +205,6 @@ export default function Signup() {
               )}
             </div>
 
-            {/* Name */}
             <div className="space-y-2">
               <Label htmlFor="name">Full Name (must match bank account)</Label>
               <Input
@@ -174,7 +217,6 @@ export default function Signup() {
               />
             </div>
 
-            {/* Email */}
             <div className="space-y-2">
               <Label htmlFor="email">Email Address</Label>
               <Input
@@ -203,17 +245,17 @@ export default function Signup() {
             </p>
           </form>
         ) : (
-          <form onSubmit={handleVerifyOtp} className="space-y-6">
+          <form onSubmit={handleVerifyOtp} className="space-y-5">
             {/* Header */}
-            <div className="space-y-2 text-center mb-2">
+            <div className="text-center">
               <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-primary/10 text-primary mb-3">
                 <ShieldCheck className="h-8 w-8" />
               </div>
               <p className="font-semibold text-white">Enter Verification Code</p>
               <p className="text-xs text-muted-foreground mt-1">
                 {devCode
-                  ? <>Code pre-filled — <span className="text-yellow-400 font-mono font-bold">{devCode}</span></>
-                  : <>Sent via Resend to <span className="text-white font-medium">{email}</span></>
+                  ? <>Dev mode — code: <span className="text-yellow-400 font-mono font-bold">{devCode}</span></>
+                  : <>Sent to <span className="text-white font-medium">{email}</span></>
                 }
               </p>
             </div>
@@ -236,7 +278,6 @@ export default function Signup() {
 
             {/* OTP input */}
             <Input
-              id="otp"
               placeholder="123456"
               value={otp}
               onChange={e => setOtp(e.target.value.replace(/\D/g, "").slice(0, 6))}
@@ -244,6 +285,7 @@ export default function Signup() {
               maxLength={6}
               disabled={isBlocked}
               autoComplete="one-time-code"
+              inputMode="numeric"
             />
 
             <Button
@@ -252,23 +294,34 @@ export default function Signup() {
               disabled={verifyLoading || otp.length !== 6 || isBlocked}
             >
               {verifyLoading ? <Loader2 className="mr-2 h-5 w-5 animate-spin" /> : null}
-              Verify & Create Account
+              Verify &amp; Create Account
             </Button>
 
-            {/* Resend code */}
-            <div className="flex items-center justify-between text-sm">
-              <Button type="button" variant="link" onClick={() => setStep(1)} className="text-muted-foreground hover:text-primary p-0 h-auto">
-                ← Back
-              </Button>
+            {/* Resend + Back row */}
+            <div className="flex items-center justify-between pt-1">
               <Button
                 type="button"
-                variant="link"
-                onClick={handleSendOtp}
-                disabled={sendLoading || isBlocked}
-                className="text-muted-foreground hover:text-primary p-0 h-auto"
+                variant="ghost"
+                size="sm"
+                onClick={() => { setStep(1); setOtp(""); setDevCode(null); }}
+                className="text-muted-foreground hover:text-white px-0"
               >
-                {sendLoading ? <Loader2 className="mr-1 h-3 w-3 animate-spin" /> : <RefreshCw className="mr-1 h-3 w-3" />}
-                Resend code
+                ← Back
+              </Button>
+
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={handleResend}
+                disabled={sendLoading || cooldown > 0 || isBlocked}
+                className="gap-2 border-border hover:border-primary/50 hover:text-primary"
+              >
+                {sendLoading
+                  ? <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                  : <RefreshCw className="h-3.5 w-3.5" />
+                }
+                {cooldown > 0 ? `Resend in ${cooldown}s` : "Resend Code"}
               </Button>
             </div>
           </form>
