@@ -17,6 +17,7 @@ export default function Signup() {
   const [email, setEmail] = useState("");
   const [name, setName] = useState("");
   const [otp, setOtp] = useState("");
+  const [devCode, setDevCode] = useState<string | null>(null);
   
   const sendOtpMutation = useSendEmailOtp();
   const verifyOtpMutation = useVerifyEmailOtp();
@@ -49,12 +50,18 @@ export default function Signup() {
     sendOtpMutation.mutate({
       data: { email, walletAddress, name }
     }, {
-      onSuccess: () => {
-        toast.success("OTP sent to your email!");
+      onSuccess: (data: any) => {
+        if (data?.devCode) {
+          setDevCode(data.devCode);
+          setOtp(data.devCode);
+          toast.info("Dev mode: email not configured. Code pre-filled below.");
+        } else {
+          toast.success("OTP sent to your email!");
+        }
         setStep(2);
       },
-      onError: (error) => {
-        toast.error(error.error || "Failed to send OTP.");
+      onError: (error: any) => {
+        toast.error((error.data as any)?.error || error.message || "Failed to send OTP.");
       }
     });
   };
@@ -148,7 +155,12 @@ export default function Signup() {
                 <ShieldCheck className="h-8 w-8" />
               </div>
               <Label>Enter Verification Code</Label>
-              <p className="text-xs text-muted-foreground mt-1">We sent a 6-digit code to <span className="text-white font-medium">{email}</span></p>
+              <p className="text-xs text-muted-foreground mt-1">
+                {devCode
+                  ? <>Dev mode — code pre-filled. <span className="text-yellow-400 font-mono font-bold">{devCode}</span></>
+                  : <>We sent a 6-digit code to <span className="text-white font-medium">{email}</span></>
+                }
+              </p>
             </div>
 
             <div className="space-y-2">

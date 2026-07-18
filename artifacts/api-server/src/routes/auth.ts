@@ -36,9 +36,23 @@ router.post("/auth/send-otp", async (req, res) => {
   await db.delete(emailOtpsTable).where(eq(emailOtpsTable.email, email));
 
   await db.insert(emailOtpsTable).values({ email, code, expiresAt });
-  await sendOtpEmail(email, code, name);
 
-  res.json({ message: "OTP sent to your email" });
+  const emailConfigured = !!(process.env.EMAIL_USER && process.env.EMAIL_PASS);
+
+  // Respond immediately — don't block on SMTP
+  // If email isn't configured (dev/staging), return the code directly in the response
+  res.json({
+    message: emailConfigured ? "OTP sent to your email" : "OTP generated (email not configured — code returned for development)",
+    ...(!emailConfigured && { devCode: code }),
+  });
+
+  // Send email in the background after responding
+  if (emailConfigured) {
+    sendOtpEmail(email, code, name).catch((err) => {
+      console.error("[OTP] Email send failed:", err?.message);
+      console.info(`[OTP] Code for ${email}: ${code}`);
+    });
+  }
 });
 
 // POST /api/auth/verify-otp
