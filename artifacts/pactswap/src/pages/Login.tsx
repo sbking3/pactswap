@@ -58,7 +58,8 @@ export default function Login() {
           }
         },
         onError: (error) => {
-          toast.error(error.error || "Login failed");
+          const msg = (error.data as any)?.error || error.message || "Login failed";
+          toast.error(msg);
         }
       });
       
@@ -83,7 +84,8 @@ export default function Login() {
         setLocation("/dashboard");
       },
       onError: (error) => {
-        toast.error(error.error || "Invalid 2FA code");
+        const msg = (error.data as any)?.error || error.message || "Invalid 2FA code";
+        toast.error(msg);
       }
     });
   };

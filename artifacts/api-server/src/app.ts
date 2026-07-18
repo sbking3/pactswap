@@ -8,6 +8,10 @@ import { logger } from "./lib/logger";
 
 const app: Express = express();
 
+// Trust the Replit reverse proxy so rate-limit can correctly identify IPs
+// from X-Forwarded-For (prevents ERR_ERL_UNEXPECTED_X_FORWARDED_FOR)
+app.set("trust proxy", 1);
+
 // Security headers
 app.use(helmet());
 
