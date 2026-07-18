@@ -1,12 +1,29 @@
 import { useState } from "react";
 import { useLocation, Link } from "wouter";
-import { useSendEmailOtp, useVerifyEmailOtp } from "@workspace/api-client-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { toast } from "sonner";
-import { Loader2, Wallet, ArrowRight, ShieldCheck } from "lucide-react";
+import { Loader2, Wallet, ArrowRight, ShieldCheck, AlertTriangle, RefreshCw } from "lucide-react";
+
+// Direct fetch helpers — new signup-specific endpoints
+const API = (path: string) => path; // relative paths work via Replit routing
+
+async function apiPost(path: string, body: object) {
+  const token = localStorage.getItem("pactswap_token");
+  const res = await fetch(API(path), {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    },
+    body: JSON.stringify(body),
+  });
+  const data = await res.json();
+  if (!res.ok) throw Object.assign(new Error(data?.error ?? "Request failed"), { data });
+  return data;
+}
 
 export default function Signup() {
   const [, setLocation] = useLocation();
@@ -18,9 +35,10 @@ export default function Signup() {
   const [name, setName] = useState("");
   const [otp, setOtp] = useState("");
   const [devCode, setDevCode] = useState<string | null>(null);
-
-  const sendOtpMutation = useSendEmailOtp();
-  const verifyOtpMutation = useVerifyEmailOtp();
+  const [attemptsLeft, setAttemptsLeft] = useState<number | null>(null);
+  const [blockedUntil, setBlockedUntil] = useState<Date | null>(null);
+  const [sendLoading, setSendLoading] = useState(false);
+  const [verifyLoading, setVerifyLoading] = useState(false);
 
   const handleConnectWallet = async () => {
     try {
@@ -29,7 +47,7 @@ export default function Signup() {
         return;
       }
       const accounts = await window.ethereum.request({ method: "eth_requestAccounts" });
-      if (accounts && accounts[0]) {
+      if (accounts?.[0]) {
         setWalletAddress(accounts[0]);
         toast.success("Wallet connected!");
       }
@@ -38,46 +56,80 @@ export default function Signup() {
     }
   };
 
-  const handleSendOtp = (e: React.FormEvent) => {
+  const handleSendOtp = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!walletAddress || !email || !name) {
       toast.error("Please fill in all fields.");
       return;
     }
-    sendOtpMutation.mutate({ data: { email, walletAddress, name } }, {
-      onSuccess: (data: any) => {
-        if (data?.devCode) {
-          setDevCode(data.devCode);
-          setOtp(data.devCode);
-          toast.info("Code pre-filled — email not configured in this environment.");
-        } else {
-          toast.success("Code sent to your email!");
-        }
-        setStep(2);
-      },
-      onError: (error: any) => {
-        toast.error((error.data as any)?.error || error.message || "Failed to send code.");
-      },
-    });
+    setSendLoading(true);
+    try {
+      const data = await apiPost("/api/auth/send-signup-otp", { email, walletAddress, name });
+      if (data?.devCode) {
+        setDevCode(data.devCode);
+        setOtp(data.devCode);
+        toast.info("Code pre-filled — Resend not configured in this environment.");
+      } else {
+        toast.success("Verification code sent! Check your inbox.");
+      }
+      setAttemptsLeft(3);
+      setBlockedUntil(null);
+      setStep(2);
+    } catch (err: any) {
+      toast.error(err?.data?.error ?? err.message ?? "Failed to send code.");
+    } finally {
+      setSendLoading(false);
+    }
   };
 
-  const handleVerifyOtp = (e: React.FormEvent) => {
+  const handleVerifyOtp = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!otp || otp.length !== 6) {
-      toast.error("Please enter a valid 6-digit code.");
+      toast.error("Please enter the 6-digit code.");
       return;
     }
-    verifyOtpMutation.mutate({ data: { email, code: otp, walletAddress, name } }, {
-      onSuccess: (data) => {
-        toast.success("Account created successfully!");
-        login(data.token, data.user.walletAddress);
-        setLocation("/dashboard");
-      },
-      onError: (error: any) => {
-        toast.error((error.data as any)?.error || error.message || "Invalid code.");
-      },
-    });
+    if (blockedUntil && new Date() < blockedUntil) {
+      const secs = Math.ceil((blockedUntil.getTime() - Date.now()) / 1000);
+      toast.error(`Too many wrong attempts. Try again in ${secs}s.`);
+      return;
+    }
+    setVerifyLoading(true);
+    try {
+      const data = await apiPost("/api/auth/verify-signup-otp", {
+        email,
+        code: otp,
+        walletAddress,
+        name,
+      });
+      toast.success("Account created! Welcome to PACTSWAP.");
+      login(data.token, data.user.walletAddress);
+      setLocation("/dashboard");
+    } catch (err: any) {
+      const errData = err?.data;
+      if (errData?.attemptsLeft !== undefined) {
+        setAttemptsLeft(errData.attemptsLeft);
+        if (errData.attemptsLeft === 0) {
+          const until = new Date(Date.now() + 5 * 60 * 1000);
+          setBlockedUntil(until);
+          toast.error("Too many wrong attempts. Blocked for 5 minutes.");
+        } else {
+          toast.error(`Wrong code. ${errData.attemptsLeft} attempt${errData.attemptsLeft === 1 ? "" : "s"} remaining.`);
+        }
+      } else if (errData?.blockedUntil) {
+        const until = new Date(errData.blockedUntil);
+        setBlockedUntil(until);
+        const mins = Math.ceil((until.getTime() - Date.now()) / 60000);
+        toast.error(`Account temporarily blocked. Try again in ${mins} minute${mins === 1 ? "" : "s"}.`);
+      } else {
+        toast.error(errData?.error ?? err.message ?? "Verification failed.");
+      }
+    } finally {
+      setVerifyLoading(false);
+    }
   };
+
+  const isBlocked = blockedUntil !== null && new Date() < blockedUntil;
+  const blockedMins = blockedUntil ? Math.ceil((blockedUntil.getTime() - Date.now()) / 60000) : 0;
 
   return (
     <div className="flex-1 flex items-center justify-center p-4">
@@ -89,6 +141,7 @@ export default function Signup() {
 
         {step === 1 ? (
           <form onSubmit={handleSendOtp} className="space-y-5">
+            {/* Wallet */}
             <div className="space-y-2">
               <Label>Web3 Wallet</Label>
               {walletAddress ? (
@@ -108,6 +161,7 @@ export default function Signup() {
               )}
             </div>
 
+            {/* Name */}
             <div className="space-y-2">
               <Label htmlFor="name">Full Name (must match bank account)</Label>
               <Input
@@ -116,9 +170,11 @@ export default function Signup() {
                 value={name}
                 onChange={e => setName(e.target.value)}
                 className="bg-background border-border"
+                required
               />
             </div>
 
+            {/* Email */}
             <div className="space-y-2">
               <Label htmlFor="email">Email Address</Label>
               <Input
@@ -128,16 +184,17 @@ export default function Signup() {
                 value={email}
                 onChange={e => setEmail(e.target.value)}
                 className="bg-background border-border"
+                required
               />
             </div>
 
             <Button
               type="submit"
               className="w-full bg-primary text-primary-foreground hover:bg-primary/90 font-bold h-12 mt-2"
-              disabled={sendOtpMutation.isPending || !walletAddress || !name || !email}
+              disabled={sendLoading || !walletAddress || !name || !email}
             >
-              {sendOtpMutation.isPending ? <Loader2 className="mr-2 h-5 w-5 animate-spin" /> : null}
-              Continue <ArrowRight className="ml-2 h-5 w-5" />
+              {sendLoading ? <Loader2 className="mr-2 h-5 w-5 animate-spin" /> : null}
+              Send Verification Code <ArrowRight className="ml-2 h-5 w-5" />
             </Button>
 
             <p className="text-center text-sm text-muted-foreground">
@@ -147,19 +204,37 @@ export default function Signup() {
           </form>
         ) : (
           <form onSubmit={handleVerifyOtp} className="space-y-6">
-            <div className="space-y-2 text-center mb-6">
-              <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-primary/10 text-primary mb-4">
+            {/* Header */}
+            <div className="space-y-2 text-center mb-2">
+              <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-primary/10 text-primary mb-3">
                 <ShieldCheck className="h-8 w-8" />
               </div>
-              <Label>Enter Verification Code</Label>
+              <p className="font-semibold text-white">Enter Verification Code</p>
               <p className="text-xs text-muted-foreground mt-1">
                 {devCode
                   ? <>Code pre-filled — <span className="text-yellow-400 font-mono font-bold">{devCode}</span></>
-                  : <>Sent to <span className="text-white font-medium">{email}</span></>
+                  : <>Sent via Resend to <span className="text-white font-medium">{email}</span></>
                 }
               </p>
             </div>
 
+            {/* Blocked warning */}
+            {isBlocked && (
+              <div className="flex items-center gap-2 bg-destructive/10 border border-destructive/30 rounded-md p-3 text-destructive text-sm">
+                <AlertTriangle className="h-4 w-4 flex-shrink-0" />
+                Too many wrong attempts. Blocked for {blockedMins} more minute{blockedMins === 1 ? "" : "s"}.
+              </div>
+            )}
+
+            {/* Attempts warning */}
+            {!isBlocked && attemptsLeft !== null && attemptsLeft <= 2 && (
+              <div className="flex items-center gap-2 bg-yellow-500/10 border border-yellow-500/30 rounded-md p-3 text-yellow-400 text-sm">
+                <AlertTriangle className="h-4 w-4 flex-shrink-0" />
+                {attemptsLeft} attempt{attemptsLeft === 1 ? "" : "s"} remaining before 5-minute block.
+              </div>
+            )}
+
+            {/* OTP input */}
             <Input
               id="otp"
               placeholder="123456"
@@ -167,20 +242,33 @@ export default function Signup() {
               onChange={e => setOtp(e.target.value.replace(/\D/g, "").slice(0, 6))}
               className="bg-background border-border text-center text-2xl tracking-[0.5em] font-mono h-14"
               maxLength={6}
+              disabled={isBlocked}
+              autoComplete="one-time-code"
             />
 
             <Button
               type="submit"
               className="w-full bg-primary text-primary-foreground hover:bg-primary/90 font-bold h-12"
-              disabled={verifyOtpMutation.isPending || otp.length !== 6}
+              disabled={verifyLoading || otp.length !== 6 || isBlocked}
             >
-              {verifyOtpMutation.isPending ? <Loader2 className="mr-2 h-5 w-5 animate-spin" /> : null}
+              {verifyLoading ? <Loader2 className="mr-2 h-5 w-5 animate-spin" /> : null}
               Verify & Create Account
             </Button>
 
-            <div className="text-center">
-              <Button type="button" variant="link" onClick={() => setStep(1)} className="text-sm text-muted-foreground hover:text-primary">
-                Back
+            {/* Resend code */}
+            <div className="flex items-center justify-between text-sm">
+              <Button type="button" variant="link" onClick={() => setStep(1)} className="text-muted-foreground hover:text-primary p-0 h-auto">
+                ← Back
+              </Button>
+              <Button
+                type="button"
+                variant="link"
+                onClick={handleSendOtp}
+                disabled={sendLoading || isBlocked}
+                className="text-muted-foreground hover:text-primary p-0 h-auto"
+              >
+                {sendLoading ? <Loader2 className="mr-1 h-3 w-3 animate-spin" /> : <RefreshCw className="mr-1 h-3 w-3" />}
+                Resend code
               </Button>
             </div>
           </form>

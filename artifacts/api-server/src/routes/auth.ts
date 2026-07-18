@@ -6,13 +6,146 @@ import { usersTable, emailOtpsTable } from "@workspace/db";
 import { eq, and, gt } from "drizzle-orm";
 import { signToken, verifySiweSignature } from "../lib/auth";
 import { sendOtpEmail } from "../lib/email";
+import { sendSignupOtpEmail } from "../lib/resend";
 import { requireAuth } from "../middlewares/authMiddleware";
+import { logger } from "../lib/logger";
 
 const router = Router();
 
 function generateOtp(): string {
   return Math.floor(100000 + Math.random() * 900000).toString();
 }
+
+// ─── Signup OTP (Resend) ──────────────────────────────────────────────────────
+
+// POST /api/auth/send-signup-otp
+router.post("/auth/send-signup-otp", async (req, res) => {
+  const { email, walletAddress, name } = req.body;
+  if (!email || !walletAddress || !name) {
+    res.status(400).json({ error: "email, walletAddress, and name are required" });
+    return;
+  }
+
+  // Check email not taken by a different wallet
+  const existing = await db.select().from(usersTable).where(eq(usersTable.email, email));
+  if (existing.length > 0 && existing[0].walletAddress.toLowerCase() !== walletAddress.toLowerCase()) {
+    res.status(400).json({ error: "Email already registered to another wallet" });
+    return;
+  }
+
+  const code = generateOtp();
+  const expiresAt = new Date(Date.now() + 10 * 60 * 1000); // 10 min
+
+  // Replace any existing signup OTP for this email
+  await db.delete(emailOtpsTable).where(and(eq(emailOtpsTable.email, email), eq(emailOtpsTable.type, "signup")));
+  await db.insert(emailOtpsTable).values({ email, code, type: "signup", expiresAt, attempts: 0 });
+
+  const resendConfigured = !!process.env.RESEND_API_KEY;
+
+  // Respond immediately; email fires in background
+  res.json({
+    message: resendConfigured ? "Verification code sent to your email" : "OTP generated (Resend not configured — code returned for development)",
+    ...(!resendConfigured && { devCode: code }),
+  });
+
+  if (resendConfigured) {
+    sendSignupOtpEmail(email, code, name).catch((err) => {
+      logger.error({ err, email }, "Resend signup OTP failed");
+    });
+  }
+});
+
+// POST /api/auth/verify-signup-otp
+router.post("/auth/verify-signup-otp", async (req, res) => {
+  const { email, code, walletAddress, name, phone, country } = req.body;
+  if (!email || !code || !walletAddress || !name) {
+    res.status(400).json({ error: "email, code, walletAddress, and name are required" });
+    return;
+  }
+
+  const now = new Date();
+
+  // Find the signup OTP record
+  const otps = await db
+    .select()
+    .from(emailOtpsTable)
+    .where(and(eq(emailOtpsTable.email, email), eq(emailOtpsTable.type, "signup")));
+
+  if (otps.length === 0) {
+    res.status(400).json({ error: "No pending verification found. Please request a new code." });
+    return;
+  }
+
+  const otp = otps[0];
+
+  // Check if blocked
+  if (otp.blockedUntil && otp.blockedUntil > now) {
+    const minsLeft = Math.ceil((otp.blockedUntil.getTime() - now.getTime()) / 60000);
+    res.status(429).json({ error: `Too many wrong attempts. Try again in ${minsLeft} minute${minsLeft === 1 ? "" : "s"}.`, blockedUntil: otp.blockedUntil });
+    return;
+  }
+
+  // Check expiry
+  if (otp.expiresAt < now) {
+    await db.delete(emailOtpsTable).where(eq(emailOtpsTable.id, otp.id));
+    res.status(400).json({ error: "Code expired. Please request a new one." });
+    return;
+  }
+
+  // Wrong code
+  if (otp.code !== code) {
+    const newAttempts = (otp.attempts ?? 0) + 1;
+    const MAX_ATTEMPTS = 3;
+    if (newAttempts >= MAX_ATTEMPTS) {
+      const blockedUntil = new Date(Date.now() + 5 * 60 * 1000); // 5 min block
+      await db.update(emailOtpsTable)
+        .set({ attempts: newAttempts, blockedUntil })
+        .where(eq(emailOtpsTable.id, otp.id));
+      res.status(429).json({ error: "Too many wrong attempts. Blocked for 5 minutes.", blockedUntil, attemptsLeft: 0 });
+    } else {
+      await db.update(emailOtpsTable)
+        .set({ attempts: newAttempts })
+        .where(eq(emailOtpsTable.id, otp.id));
+      const attemptsLeft = MAX_ATTEMPTS - newAttempts;
+      res.status(400).json({ error: "Invalid code.", attemptsLeft });
+    }
+    return;
+  }
+
+  // ✅ Code correct — delete OTP and create/upsert user
+  await db.delete(emailOtpsTable).where(eq(emailOtpsTable.id, otp.id));
+
+  const existingUsers = await db.select().from(usersTable).where(eq(usersTable.walletAddress, walletAddress.toLowerCase()));
+  let user;
+  if (existingUsers.length > 0) {
+    const updated = await db
+      .update(usersTable)
+      .set({ emailVerified: true, name, ...(phone ? { phone } : {}), ...(country ? { country } : {}) })
+      .where(eq(usersTable.walletAddress, walletAddress.toLowerCase()))
+      .returning();
+    user = updated[0];
+  } else {
+    const created = await db
+      .insert(usersTable)
+      .values({
+        walletAddress: walletAddress.toLowerCase(),
+        name,
+        email,
+        emailVerified: true,
+        kycLevel: 1,
+        kycStatus: "approved",
+        phone: phone ?? null,
+        country: country ?? "Nigeria",
+      })
+      .returning();
+    user = created[0];
+  }
+
+  const token = signToken({ userId: user.id, walletAddress: user.walletAddress });
+  res.json({ user, token });
+});
+
+// ─── Legacy OTP (nodemailer) ──────────────────────────────────────────────────
 
 // POST /api/auth/send-otp
 router.post("/auth/send-otp", async (req, res) => {
