@@ -1,0 +1,41 @@
+Update my Next.js escrow app to use the new deployed contract.
+
+Contract Address: 0xCf9Fd90861085135f8661C29127A1F8F9ccA4061
+USDT Mainnet Address: 0x55d398326f99059fF775485246999027B3197955
+Network: BSC Mainnet, ChainId: 56
+
+1. Create file lib/contractABI.json and paste this ABI:
+[
+	{"inputs":[{"internalType":"address","name":"_usdtToken","type":"address"},{"internalType":"address","name":"_feeRecipient","type":"address"}],"stateMutability":"nonpayable","type":"constructor"},
+	{"inputs":[],"name":"ReentrancyGuardReentrantCall","type":"error"},
+	{"anonymous":false,"inputs":[{"indexed":true,"internalType":"bytes32","name":"escrowId","type":"bytes32"},{"indexed":true,"internalType":"address","name":"buyer","type":"address"},{"indexed":true,"internalType":"address","name":"seller","type":"address"},{"indexed":false,"internalType":"uint256","name":"amount","type":"uint256"}],"name":"EscrowCreated","type":"event"},
+	{"anonymous":false,"inputs":[{"indexed":true,"internalType":"bytes32","name":"escrowId","type":"bytes32"},{"indexed":false,"internalType":"address","name":"to","type":"address"},{"indexed":false,"internalType":"uint256","name":"amount","type":"uint256"}],"name":"EscrowRefunded","type":"event"},
+	{"anonymous":false,"inputs":[{"indexed":true,"internalType":"bytes32","name":"escrowId","type":"bytes32"},{"indexed":false,"internalType":"address","name":"to","type":"address"},{"indexed":false,"internalType":"uint256","name":"sellerAmount","type":"uint256"},{"indexed":false,"internalType":"uint256","name":"feeAmount","type":"uint256"}],"name":"EscrowReleased","type":"event"},
+	{"anonymous":false,"inputs":[{"indexed":true,"internalType":"bytes32","name":"escrowId","type":"bytes32"}],"name":"SellerConfirmed","type":"event"},
+	{"inputs":[],"name":"AUTO_RELEASE_TIME","outputs":[{"internalType":"uint256","name":"","type":"uint256"}],"stateMutability":"view","type":"function"},
+	{"inputs":[],"name":"FEE_BPS","outputs":[{"internalType":"uint256","name":"","type":"uint256"}],"stateMutability":"view","type":"function"},
+	{"inputs":[{"internalType":"uint256","name":"","type":"uint256"}],"name":"activeEscrowIds","outputs":[{"internalType":"bytes32","name":"","type":"bytes32"}],"stateMutability":"view","type":"function"},
+	{"inputs":[],"name":"arbiter","outputs":[{"internalType":"address","name":"","type":"address"}],"stateMutability":"view","type":"function"},
+	{"inputs":[{"internalType":"bytes32","name":"_escrowId","type":"bytes32"}],"name":"confirmDelivery","outputs":[],"stateMutability":"nonpayable","type":"function"},
+	{"inputs":[{"internalType":"bytes32","name":"_escrowId","type":"bytes32"},{"internalType":"address","name":"_seller","type":"address"},{"internalType":"uint256","name":"_amount","type":"uint256"}],"name":"createEscrow","outputs":[],"stateMutability":"nonpayable","type":"function"},
+	{"inputs":[{"internalType":"bytes32","name":"","type":"bytes32"}],"name":"escrows","outputs":[{"internalType":"address","name":"buyer","type":"address"},{"internalType":"address","name":"seller","type":"address"},{"internalType":"uint256","name":"amount","type":"uint256"},{"internalType":"uint256","name":"createdAt","type":"uint256"},{"internalType":"bool","name":"released","type":"bool"},{"internalType":"bool","name":"refunded","type":"bool"},{"internalType":"bool","name":"sellerConfirmed","type":"bool"}],"stateMutability":"view","type":"function"},
+	{"inputs":[],"name":"feeRecipient","outputs":[{"internalType":"address","name":"","type":"address"}],"stateMutability":"view","type":"function"},
+	{"inputs":[],"name":"getActiveEscrowCount","outputs":[{"internalType":"uint256","name":"","type":"uint256"}],"stateMutability":"view","type":"function"},
+	{"inputs":[],"name":"processExpiredEscrows","outputs":[],"stateMutability":"nonpayable","type":"function"},
+	{"inputs":[{"internalType":"bytes32","name":"_escrowId","type":"bytes32"}],"name":"refundEscrow","outputs":[],"stateMutability":"nonpayable","type":"function"},
+	{"inputs":[{"internalType":"bytes32","name":"_escrowId","type":"bytes32"}],"name":"releaseEscrow","outputs":[],"stateMutability":"nonpayable","type":"function"},
+	{"inputs":[],"name":"usdtToken","outputs":[{"internalType":"contract IERC20","name":"","type":"address"}],"stateMutability":"view","type":"function"}
+]
+
+2. Create lib/contract.ts with ethers v6 functions to:
+- connect wallet with window.ethereum
+- approve USDT before createEscrow
+- call createEscrow(escrowId, seller, amount)
+- call confirmDelivery, releaseEscrow, refundEscrow
+- read escrows(escrowId)
+
+3. Update the "Send USDT" button to:
+- First call USDT.approve(contractAddress, amount)
+- Then call contract.createEscrow
+
+Use BSC Mainnet. Handle errors and loading states.

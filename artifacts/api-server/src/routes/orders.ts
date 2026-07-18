@@ -1,8 +1,10 @@
 import { Router } from "express";
 import { db } from "@workspace/db";
 import { ordersTable, offersTable, usersTable, disputesTable } from "@workspace/db";
-import { eq, or, and } from "drizzle-orm";
+import { eq, or } from "drizzle-orm";
 import { requireAuth } from "../middlewares/authMiddleware";
+import { releaseEscrow } from "../lib/contract";
+import { logger } from "../lib/logger";
 
 const router = Router();
 
@@ -146,7 +148,15 @@ router.patch("/orders/:id/confirm", requireAuth, async (req, res) => {
     res.status(400).json({ error: "Order is not in 'paid' status" });
     return;
   }
-  // TODO: call releaseEscrow() on contract
+  // Call releaseEscrow on-chain (fire-and-forget if PRIVATE_KEY not set)
+  const escrowTxHash = await releaseEscrow(order.escrowId).catch((err) => {
+    logger.warn({ err, orderId: order.id }, "releaseEscrow skipped or failed — proceeding with DB update");
+    return null;
+  });
+  if (escrowTxHash) {
+    logger.info({ txHash: escrowTxHash, orderId: order.id }, "releaseEscrow confirmed on-chain");
+  }
+
   const updated = await db.update(ordersTable).set({ status: 2, updatedAt: new Date() }).where(eq(ordersTable.id, order.id)).returning();
   // Update trade counts
   await db.update(usersTable).set({ tradeCount: (await db.select().from(usersTable).where(eq(usersTable.id, order.buyerId)))[0].tradeCount + 1 }).where(eq(usersTable.id, order.buyerId));

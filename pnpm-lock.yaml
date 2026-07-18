@@ -449,6 +449,10 @@ importers:
         version: 3.25.76
 
   artifacts/pactswap:
+    dependencies:
+      ethers:
+        specifier: ^6.17.0
+        version: 6.17.0
     devDependencies:
       '@hookform/resolvers':
         specifier: ^3.10.0
