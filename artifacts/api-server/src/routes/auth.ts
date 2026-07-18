@@ -108,6 +108,44 @@ router.post("/auth/verify-otp", async (req, res) => {
   res.json({ user, token });
 });
 
+// POST /api/auth/register — instant registration, no OTP required
+router.post("/auth/register", async (req, res) => {
+  const { walletAddress, name, email, phone, country } = req.body;
+  if (!walletAddress || !name || !email) {
+    res.status(400).json({ error: "walletAddress, name, and email are required" });
+    return;
+  }
+
+  // Check email not taken by a different wallet
+  const byEmail = await db.select().from(usersTable).where(eq(usersTable.email, email));
+  if (byEmail.length > 0 && byEmail[0].walletAddress.toLowerCase() !== walletAddress.toLowerCase()) {
+    res.status(400).json({ error: "Email already registered to another wallet" });
+    return;
+  }
+
+  // Check wallet not already registered
+  const byWallet = await db.select().from(usersTable).where(eq(usersTable.walletAddress, walletAddress.toLowerCase()));
+  if (byWallet.length > 0) {
+    res.status(400).json({ error: "Wallet already registered. Please log in instead." });
+    return;
+  }
+
+  const created = await db.insert(usersTable).values({
+    walletAddress: walletAddress.toLowerCase(),
+    name,
+    email,
+    emailVerified: false,
+    kycLevel: 0,
+    kycStatus: "none",
+    phone: phone ?? null,
+    country: country ?? "Nigeria",
+  }).returning();
+
+  const user = created[0];
+  const token = signToken({ userId: user.id, walletAddress: user.walletAddress });
+  res.status(201).json({ user, token });
+});
+
 // POST /api/auth/siwe
 router.post("/auth/siwe", async (req, res) => {
   const { walletAddress, message, signature, totpCode } = req.body;
