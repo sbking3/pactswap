@@ -1,0 +1,27 @@
+kind = "web"
+previewPath = "/"
+title = "PACTSWAP"
+version = "1.0.0"
+id = "artifacts/pactswap"
+router = "path"
+
+[[services]]
+name = "web"
+paths = [ "/" ]
+localPort = 19681
+
+[services.development]
+run = "pnpm --filter @workspace/pactswap run dev"
+
+[services.production]
+build = [ "pnpm", "--filter", "@workspace/pactswap", "run", "build" ]
+serve = "static"
+publicDir = "artifacts/pactswap/dist/public"
+
+[[services.production.rewrites]]
+from = "/*"
+to = "/index.html"
+
+[services.env]
+PORT = "19681"
+BASE_PATH = "/"

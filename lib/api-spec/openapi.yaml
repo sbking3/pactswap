@@ -3,13 +3,30 @@ info:
   # Do not change the title, if the title changes, the import paths will be broken
   title: Api
   version: 0.1.0
-  description: API specification
+  description: PACTSWAP P2P USDT Escrow Trading Platform API
 servers:
   - url: /api
     description: Base API path
 tags:
   - name: health
     description: Health operations
+  - name: auth
+    description: Authentication operations
+  - name: users
+    description: User profile operations
+  - name: kyc
+    description: KYC verification
+  - name: offers
+    description: P2P trade offers
+  - name: orders
+    description: Escrow orders
+  - name: disputes
+    description: Trade disputes
+  - name: admin
+    description: Admin operations
+  - name: dashboard
+    description: Dashboard statistics
+
 paths:
   /healthz:
     get:
@@ -24,6 +41,991 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/HealthStatus"
+
+  # ─── AUTH ───────────────────────────────────────────────────────────────────
+  /auth/send-otp:
+    post:
+      operationId: sendEmailOtp
+      tags: [auth]
+      summary: Send email OTP for signup/verification
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SendOtpInput"
+      responses:
+        "200":
+          description: OTP sent
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MessageResponse"
+        "400":
+          description: Bad request
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /auth/verify-otp:
+    post:
+      operationId: verifyEmailOtp
+      tags: [auth]
+      summary: Verify email OTP and complete registration
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/VerifyOtpInput"
+      responses:
+        "200":
+          description: Email verified, user created/updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AuthResponse"
+        "400":
+          description: Invalid or expired OTP
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /auth/siwe:
+    post:
+      operationId: siweLogin
+      tags: [auth]
+      summary: Sign-In With Ethereum (wallet signature login)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SiweInput"
+      responses:
+        "200":
+          description: Authenticated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AuthResponse"
+        "401":
+          description: Invalid signature
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /auth/2fa/setup:
+    post:
+      operationId: setup2fa
+      tags: [auth]
+      summary: Generate 2FA secret and QR code
+      responses:
+        "200":
+          description: 2FA setup data
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TwoFaSetup"
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /auth/2fa/enable:
+    post:
+      operationId: enable2fa
+      tags: [auth]
+      summary: Enable 2FA after verifying a TOTP code
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/TwoFaVerifyInput"
+      responses:
+        "200":
+          description: 2FA enabled
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MessageResponse"
+        "400":
+          description: Invalid TOTP
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /auth/2fa/disable:
+    post:
+      operationId: disable2fa
+      tags: [auth]
+      summary: Disable 2FA
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/TwoFaVerifyInput"
+      responses:
+        "200":
+          description: 2FA disabled
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MessageResponse"
+        "400":
+          description: Invalid TOTP
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /auth/me:
+    get:
+      operationId: getMe
+      tags: [auth]
+      summary: Get current authenticated user
+      responses:
+        "200":
+          description: Current user
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/User"
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /auth/logout:
+    post:
+      operationId: logout
+      tags: [auth]
+      summary: Logout current user
+      responses:
+        "200":
+          description: Logged out
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MessageResponse"
+
+  # ─── USERS ──────────────────────────────────────────────────────────────────
+  /users/profile:
+    patch:
+      operationId: updateProfile
+      tags: [users]
+      summary: Update user profile
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ProfileUpdate"
+      responses:
+        "200":
+          description: Profile updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/User"
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /users/bank:
+    patch:
+      operationId: updateBankDetails
+      tags: [users]
+      summary: Update (encrypted) bank details
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/BankDetailsInput"
+      responses:
+        "200":
+          description: Bank details updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MessageResponse"
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /users/me/stats:
+    get:
+      operationId: getMyStats
+      tags: [users]
+      summary: Get current user's trading statistics
+      responses:
+        "200":
+          description: User statistics
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/UserStats"
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /users/{walletAddress}:
+    get:
+      operationId: getUserProfile
+      tags: [users]
+      summary: Get public user profile by wallet address
+      parameters:
+        - name: walletAddress
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: User public profile
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PublicProfile"
+        "404":
+          description: User not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  # ─── KYC ────────────────────────────────────────────────────────────────────
+  /kyc/status:
+    get:
+      operationId: getKycStatus
+      tags: [kyc]
+      summary: Get current user's KYC status
+      responses:
+        "200":
+          description: KYC status
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/KycStatus"
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /kyc/submit:
+    post:
+      operationId: submitKyc
+      tags: [kyc]
+      summary: Submit KYC documents
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/KycSubmitInput"
+      responses:
+        "200":
+          description: KYC submitted
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/KycStatus"
+        "400":
+          description: Invalid data
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  # ─── OFFERS ─────────────────────────────────────────────────────────────────
+  /offers:
+    get:
+      operationId: listOffers
+      tags: [offers]
+      summary: List active offers on the marketplace
+      parameters:
+        - name: minAmount
+          in: query
+          schema:
+            type: number
+        - name: maxAmount
+          in: query
+          schema:
+            type: number
+        - name: page
+          in: query
+          schema:
+            type: integer
+            default: 1
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 20
+      responses:
+        "200":
+          description: List of offers
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OffersPage"
+
+    post:
+      operationId: createOffer
+      tags: [offers]
+      summary: Create a new sell offer (KYC Level 1+ required)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/OfferInput"
+      responses:
+        "201":
+          description: Offer created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Offer"
+        "400":
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "403":
+          description: KYC required
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /offers/my:
+    get:
+      operationId: getMyOffers
+      tags: [offers]
+      summary: Get current user's offers
+      responses:
+        "200":
+          description: User's offers
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Offer"
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /offers/{id}:
+    get:
+      operationId: getOffer
+      tags: [offers]
+      summary: Get a specific offer
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Offer details
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Offer"
+        "404":
+          description: Offer not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+    patch:
+      operationId: updateOffer
+      tags: [offers]
+      summary: Update an offer
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/OfferUpdate"
+      responses:
+        "200":
+          description: Offer updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Offer"
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+    delete:
+      operationId: deleteOffer
+      tags: [offers]
+      summary: Delete an offer
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Offer deleted
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MessageResponse"
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  # ─── ORDERS ─────────────────────────────────────────────────────────────────
+  /orders:
+    get:
+      operationId: listOrders
+      tags: [orders]
+      summary: Get current user's orders (as buyer or seller)
+      parameters:
+        - name: role
+          in: query
+          schema:
+            type: string
+            enum: [buyer, seller]
+        - name: status
+          in: query
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Orders list
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Order"
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+    post:
+      operationId: createOrder
+      tags: [orders]
+      summary: Create a new escrow order from an offer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/OrderInput"
+      responses:
+        "201":
+          description: Order created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Order"
+        "400":
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /orders/{id}:
+    get:
+      operationId: getOrder
+      tags: [orders]
+      summary: Get a specific order
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Order details
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Order"
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /orders/{id}/paid:
+    patch:
+      operationId: markOrderPaid
+      tags: [orders]
+      summary: Buyer confirms they have sent payment
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Order marked as paid
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Order"
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /orders/{id}/confirm:
+    patch:
+      operationId: confirmPayment
+      tags: [orders]
+      summary: Seller confirms payment received, releases escrow
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Escrow released
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Order"
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /orders/{id}/dispute:
+    post:
+      operationId: openDispute
+      tags: [orders]
+      summary: Open a dispute for an order
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/DisputeInput"
+      responses:
+        "201":
+          description: Dispute opened
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Dispute"
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: Order not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  # ─── DISPUTES ───────────────────────────────────────────────────────────────
+  /disputes:
+    get:
+      operationId: listDisputes
+      tags: [disputes]
+      summary: List all disputes (admin only)
+      parameters:
+        - name: status
+          in: query
+          schema:
+            type: string
+            enum: [open, resolved, rejected]
+      responses:
+        "200":
+          description: Disputes list
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Dispute"
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "403":
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /disputes/{id}:
+    get:
+      operationId: getDispute
+      tags: [disputes]
+      summary: Get a specific dispute
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Dispute details
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Dispute"
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+    patch:
+      operationId: resolveDispute
+      tags: [disputes]
+      summary: Resolve or reject a dispute (admin only)
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/DisputeResolution"
+      responses:
+        "200":
+          description: Dispute resolved
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Dispute"
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "403":
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  # ─── DASHBOARD ──────────────────────────────────────────────────────────────
+  /dashboard/stats:
+    get:
+      operationId: getDashboardStats
+      tags: [dashboard]
+      summary: Get current user's dashboard statistics
+      responses:
+        "200":
+          description: Dashboard stats
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DashboardStats"
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  # ─── ADMIN ──────────────────────────────────────────────────────────────────
+  /admin/stats:
+    get:
+      operationId: adminGetStats
+      tags: [admin]
+      summary: Get platform-wide statistics (admin only)
+      responses:
+        "200":
+          description: Platform statistics
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AdminStats"
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "403":
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /admin/kyc:
+    get:
+      operationId: adminListKyc
+      tags: [admin]
+      summary: List all KYC submissions (admin only)
+      parameters:
+        - name: status
+          in: query
+          schema:
+            type: string
+            enum: [pending, approved, rejected]
+      responses:
+        "200":
+          description: KYC submissions
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/KycSubmission"
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "403":
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /admin/kyc/{id}:
+    patch:
+      operationId: adminUpdateKyc
+      tags: [admin]
+      summary: Approve or reject a KYC submission (admin only)
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/KycDecision"
+      responses:
+        "200":
+          description: KYC updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/KycSubmission"
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "403":
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /admin/users:
+    get:
+      operationId: adminListUsers
+      tags: [admin]
+      summary: List all users (admin only)
+      parameters:
+        - name: page
+          in: query
+          schema:
+            type: integer
+            default: 1
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 20
+        - name: search
+          in: query
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Users list
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AdminUsersPage"
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "403":
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /admin/users/{id}/ban:
+    patch:
+      operationId: adminBanUser
+      tags: [admin]
+      summary: Ban or unban a user (admin only)
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/BanInput"
+      responses:
+        "200":
+          description: User ban status updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MessageResponse"
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "403":
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
 components:
   schemas:
     HealthStatus:
@@ -34,3 +1036,488 @@ components:
       required:
         - status
 
+    ErrorResponse:
+      type: object
+      properties:
+        error:
+          type: string
+      required:
+        - error
+
+    MessageResponse:
+      type: object
+      properties:
+        message:
+          type: string
+      required:
+        - message
+
+    # ─── AUTH SCHEMAS ──────────────────────────────────────────────────────────
+    SendOtpInput:
+      type: object
+      required: [email, walletAddress, name]
+      properties:
+        email:
+          type: string
+        walletAddress:
+          type: string
+        name:
+          type: string
+
+    VerifyOtpInput:
+      type: object
+      required: [email, code, walletAddress, name]
+      properties:
+        email:
+          type: string
+        code:
+          type: string
+        walletAddress:
+          type: string
+        name:
+          type: string
+        phone:
+          type: string
+        country:
+          type: string
+
+    SiweInput:
+      type: object
+      required: [walletAddress, message, signature]
+      properties:
+        walletAddress:
+          type: string
+        message:
+          type: string
+        signature:
+          type: string
+        totpCode:
+          type: ["string", "null"]
+
+    AuthResponse:
+      type: object
+      required: [user, token]
+      properties:
+        user:
+          $ref: "#/components/schemas/User"
+        token:
+          type: string
+        requires2FA:
+          type: boolean
+
+    TwoFaSetup:
+      type: object
+      required: [secret, qrCodeUrl, qrCodeDataUrl]
+      properties:
+        secret:
+          type: string
+        qrCodeUrl:
+          type: string
+        qrCodeDataUrl:
+          type: string
+
+    TwoFaVerifyInput:
+      type: object
+      required: [token]
+      properties:
+        token:
+          type: string
+
+    # ─── USER SCHEMAS ──────────────────────────────────────────────────────────
+    User:
+      type: object
+      required: [id, walletAddress, name, email, emailVerified, kycStatus, kycLevel, isBanned, twoFactorEnabled, tradeCount, rating, createdAt]
+      properties:
+        id:
+          type: string
+        walletAddress:
+          type: string
+        name:
+          type: string
+        email:
+          type: string
+        emailVerified:
+          type: boolean
+        phone:
+          type: ["string", "null"]
+        country:
+          type: string
+        kycStatus:
+          type: string
+          enum: [pending, approved, rejected]
+        kycLevel:
+          type: integer
+        isBanned:
+          type: boolean
+        twoFactorEnabled:
+          type: boolean
+        tradeCount:
+          type: integer
+        rating:
+          type: number
+        bankName:
+          type: ["string", "null"]
+        accountNumber:
+          type: ["string", "null"]
+        accountName:
+          type: ["string", "null"]
+        createdAt:
+          type: string
+          format: date-time
+
+    PublicProfile:
+      type: object
+      required: [id, walletAddress, name, kycLevel, tradeCount, rating, createdAt]
+      properties:
+        id:
+          type: string
+        walletAddress:
+          type: string
+        name:
+          type: string
+        kycLevel:
+          type: integer
+        tradeCount:
+          type: integer
+        rating:
+          type: number
+        createdAt:
+          type: string
+          format: date-time
+
+    ProfileUpdate:
+      type: object
+      properties:
+        name:
+          type: string
+        phone:
+          type: string
+        country:
+          type: string
+
+    BankDetailsInput:
+      type: object
+      required: [bankName, accountNumber, accountName]
+      properties:
+        bankName:
+          type: string
+        accountNumber:
+          type: string
+        accountName:
+          type: string
+
+    UserStats:
+      type: object
+      required: [totalTrades, successfulTrades, disputedTrades, totalVolumeUsdt, rating, memberSince]
+      properties:
+        totalTrades:
+          type: integer
+        successfulTrades:
+          type: integer
+        disputedTrades:
+          type: integer
+        totalVolumeUsdt:
+          type: number
+        rating:
+          type: number
+        memberSince:
+          type: string
+          format: date-time
+
+    # ─── KYC SCHEMAS ──────────────────────────────────────────────────────────
+    KycStatus:
+      type: object
+      required: [kycLevel, kycStatus]
+      properties:
+        kycLevel:
+          type: integer
+        kycStatus:
+          type: string
+          enum: [pending, approved, rejected]
+        submission:
+          $ref: "#/components/schemas/KycSubmission"
+
+    KycSubmitInput:
+      type: object
+      required: [idType, idNumber]
+      properties:
+        idType:
+          type: string
+          enum: [bvn, nin, passport, drivers_license]
+        idNumber:
+          type: string
+        selfieUrl:
+          type: ["string", "null"]
+
+    KycSubmission:
+      type: object
+      required: [id, userId, idType, idNumber, status, createdAt]
+      properties:
+        id:
+          type: string
+        userId:
+          type: string
+        idType:
+          type: string
+        idNumber:
+          type: string
+        selfieUrl:
+          type: ["string", "null"]
+        status:
+          type: string
+          enum: [pending, approved, rejected]
+        createdAt:
+          type: string
+          format: date-time
+        user:
+          $ref: "#/components/schemas/PublicProfile"
+
+    KycDecision:
+      type: object
+      required: [status]
+      properties:
+        status:
+          type: string
+          enum: [approved, rejected]
+        reason:
+          type: ["string", "null"]
+
+    # ─── OFFER SCHEMAS ─────────────────────────────────────────────────────────
+    Offer:
+      type: object
+      required: [id, escrowId, sellerId, asset, priceNaira, amountUsdt, minTrade, maxTrade, paymentMethod, isActive, createdAt]
+      properties:
+        id:
+          type: string
+        escrowId:
+          type: string
+        sellerId:
+          type: string
+        asset:
+          type: string
+        priceNaira:
+          type: number
+        amountUsdt:
+          type: number
+        minTrade:
+          type: number
+        maxTrade:
+          type: number
+        paymentMethod:
+          type: string
+        isActive:
+          type: boolean
+        createdAt:
+          type: string
+          format: date-time
+        seller:
+          $ref: "#/components/schemas/PublicProfile"
+
+    OfferInput:
+      type: object
+      required: [escrowId, priceNaira, amountUsdt, minTrade, maxTrade]
+      properties:
+        escrowId:
+          type: string
+        priceNaira:
+          type: number
+        amountUsdt:
+          type: number
+        minTrade:
+          type: number
+        maxTrade:
+          type: number
+        paymentMethod:
+          type: string
+
+    OfferUpdate:
+      type: object
+      properties:
+        priceNaira:
+          type: number
+        amountUsdt:
+          type: number
+        minTrade:
+          type: number
+        maxTrade:
+          type: number
+        isActive:
+          type: boolean
+
+    OffersPage:
+      type: object
+      required: [offers, total, page, limit]
+      properties:
+        offers:
+          type: array
+          items:
+            $ref: "#/components/schemas/Offer"
+        total:
+          type: integer
+        page:
+          type: integer
+        limit:
+          type: integer
+
+    # ─── ORDER SCHEMAS ─────────────────────────────────────────────────────────
+    Order:
+      type: object
+      required: [id, escrowId, orderId, buyerId, sellerId, amountUsdt, priceNaira, status, createdAt]
+      properties:
+        id:
+          type: string
+        escrowId:
+          type: string
+        orderId:
+          type: string
+        buyerId:
+          type: string
+        sellerId:
+          type: string
+        amountUsdt:
+          type: number
+        priceNaira:
+          type: number
+        status:
+          type: integer
+          description: "0=created, 1=paid, 2=released, 3=cancelled, 4=disputed"
+        contractTx:
+          type: ["string", "null"]
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+        buyer:
+          $ref: "#/components/schemas/PublicProfile"
+        seller:
+          $ref: "#/components/schemas/PublicProfile"
+        offer:
+          $ref: "#/components/schemas/Offer"
+        dispute:
+          $ref: "#/components/schemas/Dispute"
+
+    OrderInput:
+      type: object
+      required: [offerId, escrowId, amountUsdt, contractTx]
+      properties:
+        offerId:
+          type: string
+        escrowId:
+          type: string
+        amountUsdt:
+          type: number
+        contractTx:
+          type: string
+
+    # ─── DISPUTE SCHEMAS ───────────────────────────────────────────────────────
+    Dispute:
+      type: object
+      required: [id, orderId, reason, status, createdAt]
+      properties:
+        id:
+          type: string
+        orderId:
+          type: string
+        reason:
+          type: string
+        evidenceUrl:
+          type: ["string", "null"]
+        status:
+          type: string
+          enum: [open, resolved, rejected]
+        resolution:
+          type: ["string", "null"]
+        createdAt:
+          type: string
+          format: date-time
+
+    DisputeInput:
+      type: object
+      required: [reason]
+      properties:
+        reason:
+          type: string
+        evidenceUrl:
+          type: ["string", "null"]
+
+    DisputeResolution:
+      type: object
+      required: [status]
+      properties:
+        status:
+          type: string
+          enum: [resolved, rejected]
+        resolution:
+          type: string
+
+    # ─── DASHBOARD SCHEMAS ─────────────────────────────────────────────────────
+    DashboardStats:
+      type: object
+      required: [activeOrders, completedOrders, totalVolumeUsdt, totalEarningsNaira, openDisputes, rating, kycLevel, recentOrders]
+      properties:
+        activeOrders:
+          type: integer
+        completedOrders:
+          type: integer
+        totalVolumeUsdt:
+          type: number
+        totalEarningsNaira:
+          type: number
+        openDisputes:
+          type: integer
+        rating:
+          type: number
+        kycLevel:
+          type: integer
+        recentOrders:
+          type: array
+          items:
+            $ref: "#/components/schemas/Order"
+
+    # ─── ADMIN SCHEMAS ─────────────────────────────────────────────────────────
+    AdminStats:
+      type: object
+      required: [totalUsers, totalOffers, totalOrders, completedOrders, disputedOrders, totalVolumeUsdt, pendingKyc, openDisputes]
+      properties:
+        totalUsers:
+          type: integer
+        totalOffers:
+          type: integer
+        totalOrders:
+          type: integer
+        completedOrders:
+          type: integer
+        disputedOrders:
+          type: integer
+        totalVolumeUsdt:
+          type: number
+        pendingKyc:
+          type: integer
+        openDisputes:
+          type: integer
+
+    AdminUsersPage:
+      type: object
+      required: [users, total, page, limit]
+      properties:
+        users:
+          type: array
+          items:
+            $ref: "#/components/schemas/User"
+        total:
+          type: integer
+        page:
+          type: integer
+        limit:
+          type: integer
+
+    BanInput:
+      type: object
+      required: [isBanned]
+      properties:
+        isBanned:
+          type: boolean
+        reason:
+          type: ["string", "null"]

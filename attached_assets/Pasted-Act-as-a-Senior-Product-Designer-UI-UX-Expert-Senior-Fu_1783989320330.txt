@@ -1,0 +1,132 @@
+Act as a Senior Product Designer, UI/UX Expert, Senior Fullstack Engineer, and Smart Contract Security Auditor.
+
+Build me a complete production-ready P2P USDT Escrow Trading platform called "PACTSWAP" for BNB Chain.
+Slogan: "Trade with Trust. PACTSWAP."
+
+Tech: Next.js 15, React 19, TypeScript, Tailwind, Shadcn/UI, Framer Motion, Prisma, PostgreSQL, Ethers.js v6, Sonner, Helmet, Express-rate-limit, crypto-js, nodemailer, speakeasy, qrcode
+
+BRANDING + DESIGN SYSTEM + LOGO
+
+App Name: PACTSWAP
+Theme: Dark Mode Only. Background: #090909, Cards: #141414, Accent: #F5C242 Gold
+Font: Inter. Style: Premium Fintech, Binance quality
+Red Warning Banner: "⚠️ PACTSWAP SCAM WARNING: Never send money outside PACTSWAP Escrow."
+
+LOGO COMPONENT: /components/PactSwapLogo.tsx
+export default function PactSwapLogo({size = 40}: {size?: number}) {
+  return (
+    <div className="flex items-center gap-2">
+      <svg width={size} height={size} viewBox="0 0 100 100" fill="none">
+        <path d="M50 5 L90 25 L90 55 C90 80 50 95 50 95 C50 95 10 80 10 55 L10 25 L50 5 Z" fill="#F5C242"/>
+        <text x="50" y="60" font-family="Inter" font-size="40" font-weight="700" fill="#090909" text-anchor="middle">PS</text>
+      </svg>
+      <span className="text-2xl font-bold text-white">PACTSWAP</span>
+    </div>
+  )
+}
+
+SMART CONTRACT
+
+CONTRACT: 0x68D48B7559875261972240DeF7d0393042EFd422
+USDT: 0x55d398326f99059fF775485246999027B3197955
+NETWORK: BSC Mainnet ChainID 56
+FEE: 2.5% = 250 BPS. AUTO_RELEASE_TIME: 24 hours
+ABI: [same as v5.1]
+
+DATABASE - Prisma + PostgreSQL + ENCRYPTION + EMAIL + 2FA
+
+schema.prisma:
+model User {
+  id String @id @default(cuid())
+  walletAddress String @unique
+  name String
+  email String @unique
+  emailVerified Boolean @default(false)
+  phone String
+  country String @default("Nigeria")
+  kycStatus String @default("pending")
+  kycLevel Int @default(0)
+  isBanned Boolean @default(false)
+  twoFactorEnabled Boolean @default(false)
+  twoFactorSecret String
+  bankName String
+  accountNumber String
+  accountName String
+  tradeCount Int @default(0)
+  rating Float @default(5.0)
+  createdAt DateTime @default(now())
+}
+model EmailOTP { id String @id @default(cuid()) userId String email String code String expiresAt DateTime }
+model KYC { id String @id @default(cuid()) userId String idType String idNumber String selfieUrl String status String }
+model Offer { id String @id @default(cuid()) escrowId String @unique sellerId String seller User @relation(fields: [sellerId], references: [id]) asset String @default("USDT") priceNaira Float amountUsdt Float minTrade Float maxTrade Float paymentMethod String @default("Bank Transfer") isActive Boolean @default(true) }
+model Order { id String @id @default(cuid()) escrowId String @unique orderId String @default(cuid()) buyerId String sellerId String amountUsdt Float priceNaira Float status Int contractTx String }
+model Dispute { id String @id @default(cuid()) orderId String reason String evidenceUrl String status String @default("open") }
+
+Use crypto-js AES-256. Key from ENV: ENCRYPTION_KEY
+
+SECURITY REQUIREMENTS
+
+1. EMAIL VERIFICATION: Send 6-digit OTP via nodemailer on signup. Expires 10min
+2. 2FA: Google Authenticator with speakeasy + qrcode
+3. SIWE: Verify wallet signature before POST
+4. Rate limit: 5 requests per 10 seconds
+5. Helmet.js security headers
+6. Zod validation
+7. Admin: wallet == ADMIN_WALLET
+8. Encrypt bank details
+9. KYC: 3 levels. Level 1: Email. Level 2: BVN. Level 3: ID + Selfie
+
+KEY UI LOGIC
+
+1. SIGNUP: Wallet + Email + Name -> Send EmailOTP -> Verify -> Create User
+2. LOGIN: Connect Wallet + Sign Message + 2FA if enabled
+3. CREATE OFFER: Must KYC Level 1+. Encrypt bank
+4. CREATE ESCROW: USDT.approve -> createEscrow -> status=0
+5. BUYER PAID: "I Have Paid on PACTSWAP" -> status=1
+6. SELLER CONFIRM: "Confirm Payment Received" -> releaseEscrow() -> status=2
+7. DISPUTE: "Open PACTSWAP Dispute" -> status=4
+8. BOT: Every 1hr call processExpiredEscrows()
+9. SHARE PROFILE: WhatsApp, Facebook, Copy Link
+
+COMPONENTS
+
+/components/Auth/EmailVerifyForm.tsx
+/components/Auth/TwoFactorSetup.tsx
+/components/KYC/KYCForm.tsx
+/components/ShareProfileButton.tsx
+/components/SecurityBanner.tsx
+/components/HeroSection.tsx
+
+PAGES
+
+/app/signup/page.tsx
+/app/settings/security/page.tsx
+/app/kyc/page.tsx
+/app/admin/kyc/page.tsx
+All other pages from v5.1 with PACTSWAP branding
+
+BACKEND - /server/server.ts
+
+Express + ethers.js v6 + nodemailer + dotenv + Helmet + express-rate-limit
+Load from Replit Secrets: DATABASE_URL, PRIVATE_KEY, ADMIN_WALLET, ENCRYPTION_KEY, EMAIL_USER, EMAIL_PASS
+API Routes: /api/auth/send-email-otp, /api/auth/verify-email-otp, /api/kyc/submit
+Cron: Every 1 hour -> contract.processExpiredEscrows()
+
+ENV SECRETS NEEDED - ONLY 5
+
+DATABASE_URL=
+PRIVATE_KEY=
+ADMIN_WALLET=
+ENCRYPTION_KEY=
+EMAIL_USER=
+EMAIL_PASS=
+
+README
+
+1. npm i
+2. Add 5 Secrets to Replit
+3. npx prisma migrate dev
+4. npm run dev
+5. npm run server
+
+RULES: Brand everything PACTSWAP. Only USDT. Only Bank Transfer. KYC required to create offer.

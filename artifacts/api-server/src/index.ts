@@ -1,5 +1,6 @@
 import app from "./app";
 import { logger } from "./lib/logger";
+import { startCronJobs } from "./lib/cron";
 
 const rawPort = process.env["PORT"];
 
@@ -21,5 +22,12 @@ app.listen(port, (err) => {
     process.exit(1);
   }
 
-  logger.info({ port }, "Server listening");
+  logger.info({ port }, "PACTSWAP API Server listening");
+
+  // Start background cron jobs (expired escrow processor etc.)
+  if (process.env.PRIVATE_KEY) {
+    startCronJobs();
+  } else {
+    logger.warn("PRIVATE_KEY not set — cron jobs disabled");
+  }
 });
