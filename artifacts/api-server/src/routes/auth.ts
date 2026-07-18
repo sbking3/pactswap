@@ -42,15 +42,22 @@ router.post("/auth/send-signup-otp", async (req, res) => {
 
   const resendConfigured = !!process.env.RESEND_API_KEY;
 
-  // Respond immediately; email fires in background
-  res.json({
-    message: resendConfigured ? "Verification code sent to your email" : "OTP generated (Resend not configured — code returned for development)",
-    ...(!resendConfigured && { devCode: code }),
-  });
-
   if (resendConfigured) {
-    sendSignupOtpEmail(email, code, name).catch((err) => {
-      logger.error({ err, email }, "Resend signup OTP failed");
+    try {
+      await sendSignupOtpEmail(email, code, name);
+      res.json({ message: "Verification code sent to your email" });
+    } catch (err: any) {
+      // Resend failed (e.g. unverified sender domain, bad key) — fall back to devCode
+      logger.error({ err: err?.message, email }, "Resend send failed — returning devCode fallback");
+      res.json({
+        message: "Email delivery failed — code returned for development",
+        devCode: code,
+      });
+    }
+  } else {
+    res.json({
+      message: "OTP generated (Resend not configured — code returned for development)",
+      devCode: code,
     });
   }
 });
