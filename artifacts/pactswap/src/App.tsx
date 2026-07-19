@@ -47,11 +47,7 @@ function Router() {
           </ProtectedRoute>
         </Route>
         
-        <Route path="/marketplace">
-          <ProtectedRoute>
-            <Marketplace />
-          </ProtectedRoute>
-        </Route>
+        <Route path="/marketplace" component={Marketplace} />
         
         <Route path="/offers/create">
           <ProtectedRoute>

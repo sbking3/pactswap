@@ -23,13 +23,13 @@ export default function Marketplace() {
 
   const { user, token } = useAuth();
 
-  const { data, isLoading, refetch } = useListOffers({
-    query: {
-      queryKey: ['offers', page, amountFilter],
-    }
-  });
+  const { data, isLoading } = useListOffers();
 
   const handleBuyClick = (offer: any) => {
+    if (!token) {
+      setLocation("/login");
+      return;
+    }
     setSelectedOffer(offer);
     setBuyAmount("");
     setBuyDialogOpen(true);
@@ -276,9 +276,9 @@ export default function Marketplace() {
             <Button 
               onClick={handleConfirmBuy} 
               className="bg-primary text-primary-foreground hover:bg-primary/90 font-bold"
-              disabled={!buyAmount || parseFloat(buyAmount) <= 0 || createOrderMutation.isPending}
+              disabled={!buyAmount || parseFloat(buyAmount) <= 0 || isBlockchainPending}
             >
-              {createOrderMutation.isPending && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
+              {isBlockchainPending && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
               Open Trade
             </Button>
           </DialogFooter>
