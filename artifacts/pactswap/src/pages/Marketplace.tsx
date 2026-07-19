@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { Link, useLocation } from "wouter";
 import { ethers } from "ethers";
-import { useListOffers, customFetch } from "@workspace/api-client-react";
+import { useListOffers } from "@workspace/api-client-react";
 import { Card, CardContent, CardHeader, CardTitle, CardFooter } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -21,7 +21,7 @@ export default function Marketplace() {
   const [buyAmount, setBuyAmount] = useState("");
   const [isBlockchainPending, setIsBlockchainPending] = useState(false);
 
-  const { user } = useAuth();
+  const { user, token } = useAuth();
 
   const { data, isLoading, refetch } = useListOffers({
     query: {
@@ -78,17 +78,23 @@ export default function Marketplace() {
       const payload = { email, amount: amountNum, token: "USDT", sellerAddress, txHash };
       console.log("POST /api/orders payload:", payload);
 
-      const order = await customFetch<{ success: boolean; orderId: string; txHash: string }>(
-        "/api/orders",
-        {
-          method: "POST",
-          body: JSON.stringify(payload),
-        }
-      );
+      const res = await fetch("/api/orders", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+        body: JSON.stringify(payload),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        toast.error(data?.error ?? "Failed to create order");
+        return;
+      }
 
       toast.success("Order created successfully!");
       setBuyDialogOpen(false);
-      setLocation(`/orders/${order.orderId}`);
+      setLocation(`/orders/${data.orderId}`);
     } catch (err: any) {
       const msg = err?.data?.error ?? err?.message ?? "Transaction failed";
       toast.error(msg);
