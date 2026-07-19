@@ -7,10 +7,13 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from "@/components/ui/dialog";
-import { Loader2, Search, Star, ShieldCheck, ArrowDownUp } from "lucide-react";
+import { Loader2, Search, Star, ShieldCheck, ArrowDownUp, ExternalLink, TriangleAlert } from "lucide-react";
 import { toast } from "sonner";
 import { useAuth } from "@/contexts/AuthContext";
 import { createEscrow } from "@/lib/contract";
+
+/** Hard cap while testing on mainnet with real funds */
+const MAX_TEST_USDT = 1;
 
 export default function Marketplace() {
   const [, setLocation] = useLocation();
@@ -39,6 +42,10 @@ export default function Marketplace() {
     const amountNum = parseFloat(buyAmount);
     if (!buyAmount || isNaN(amountNum)) {
       toast.error("Please enter a valid amount");
+      return;
+    }
+    if (amountNum > MAX_TEST_USDT) {
+      toast.error(`Test limit is ${MAX_TEST_USDT} USDT — start small, verify it works`);
       return;
     }
     if (amountNum < selectedOffer.minTrade || amountNum > selectedOffer.maxTrade) {
@@ -229,18 +236,30 @@ export default function Marketplace() {
                     <Input
                       type="number"
                       value={buyAmount}
-                      onChange={(e) => setBuyAmount(e.target.value)}
+                      onChange={(e) => {
+                        const v = parseFloat(e.target.value);
+                        if (!isNaN(v) && v > MAX_TEST_USDT) {
+                          setBuyAmount(MAX_TEST_USDT.toString());
+                        } else {
+                          setBuyAmount(e.target.value);
+                        }
+                      }}
                       placeholder="0.00"
+                      min={0}
+                      max={MAX_TEST_USDT}
                       className="pr-16 bg-background border-border text-lg h-12"
                     />
                     <div className="absolute inset-y-0 right-0 flex items-center pr-3 pointer-events-none">
                       <span className="text-primary font-bold">USDT</span>
                     </div>
                   </div>
-                  <div className="flex justify-end mt-1">
+                  <div className="flex justify-between mt-1 items-center">
+                    <span className="text-xs text-amber-400 font-medium">
+                      ⚠ Test cap: {MAX_TEST_USDT} USDT max
+                    </span>
                     <button 
                       className="text-xs text-primary hover:underline"
-                      onClick={() => setBuyAmount(Math.min(selectedOffer.maxTrade, selectedOffer.amountUsdt).toString())}
+                      onClick={() => setBuyAmount(Math.min(selectedOffer.maxTrade, selectedOffer.amountUsdt, MAX_TEST_USDT).toString())}
                     >
                       Max
                     </button>
@@ -268,6 +287,29 @@ export default function Marketplace() {
               </div>
             </div>
           )}
+
+          {/* Safety banner */}
+          <div className="mx-1 mb-2 rounded-lg border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-xs text-amber-300 space-y-1">
+            <div className="flex items-center gap-1.5 font-semibold">
+              <TriangleAlert className="w-3.5 h-3.5 shrink-0" />
+              MAINNET TEST — REAL FUNDS
+            </div>
+            <div className="flex flex-wrap gap-x-3 gap-y-0.5 text-amber-400/80">
+              <a
+                href={`https://bscscan.com/address/0xCf9Fd90861085135f8661C29127A1F8F9ccA4061`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-0.5 hover:text-amber-300 underline underline-offset-2"
+              >
+                Contract 0xCf9…4061
+                <ExternalLink className="w-2.5 h-2.5" />
+              </a>
+              <span>·</span>
+              <span>Funds held in escrow on-chain</span>
+              <span>·</span>
+              <span className="font-medium text-amber-300">Start with $1 only</span>
+            </div>
+          </div>
 
           <DialogFooter>
             <Button variant="outline" onClick={() => setBuyDialogOpen(false)} className="border-border">
