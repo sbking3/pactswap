@@ -75,6 +75,7 @@
     "zod": "catalog:"
   },
   "dependencies": {
+    "@walletconnect/ethereum-provider": "^2.23.10",
     "ethers": "^6.17.0"
   }
 }

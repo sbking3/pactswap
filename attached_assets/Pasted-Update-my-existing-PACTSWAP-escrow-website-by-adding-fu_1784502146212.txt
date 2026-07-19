@@ -1,0 +1,62 @@
+Update my existing PACTSWAP escrow website by adding full WalletConnect support while keeping every current escrow feature and UI intact.
+
+Requirements:
+
+1. Add the required CDN libraries inside the "<head>":
+
+- Web3.js (latest stable v1.x)
+- WalletConnect v1 ("@walletconnect/web3-provider")
+
+2. Update the Connect Wallet button so it works on both desktop and mobile:
+
+- If "window.ethereum" exists, connect using the MetaMask browser extension.
+- If "window.ethereum" does not exist, automatically open the WalletConnect modal.
+- Configure WalletConnect for Binance Smart Chain Mainnet using:
+    - RPC: "https://bsc-dataseed.binance.org/"
+    - Chain ID: "56"
+- Force switch to BSC if user is on wrong network and show a popup to approve
+- Show "Connecting..." on button while WalletConnect modal is open
+- After a successful connection, replace the button text with the shortened wallet address in the format:
+  "0x1234...ABCD"
+
+3. Under the Connect Wallet button, add a small helper message:
+
+«New to crypto? Download MetaMask or Trust Wallet»
+
+Include clickable Google Play Store links for both MetaMask and Trust Wallet.
+
+4. Ensure WalletConnect is fully compatible with Binance Smart Chain and works for:
+
+- Reading wallet balances
+- Reading token balances
+- USDT token approvals ("approve()")
+- Signing transactions
+- Sending transactions
+- Calling every existing escrow contract function without breaking any current functionality
+
+5. Keep all existing escrow logic, UI, styling, animations, forms, and smart contract interactions exactly as they are. Do not remove, rename, or modify any existing escrow functions unless necessary to integrate WalletConnect.
+
+6. My escrow contract is deployed on Binance Smart Chain:
+   Contract Address:
+   "0xCf9Fd90861085135f8661C29127A1F8F9ccA4061"
+
+7. After connecting, use the connected provider (MetaMask or WalletConnect) for every Web3 contract interaction so the website behaves identically regardless of which wallet the user uses.
+
+8. Add proper event listeners for:
+
+- "accountsChanged"
+- "chainChanged" 
+- "disconnect"
+
+Automatically update the displayed wallet address, reconnect if needed, and refresh the UI when the network changes.
+
+9. Handle errors gracefully, including:
+
+- User rejects connection
+- WalletConnect disconnects
+- Wrong network selected
+- Wallet unavailable
+
+Display user-friendly error messages without breaking the page.
+
+10. The final implementation should be production-ready, mobile-friendly, and fully compatible with Chrome, Safari, MetaMask Mobile, Trust Wallet, TokenPocket, SafePal, and other WalletConnect-supported wallets while preserving all existing escrow functionality.

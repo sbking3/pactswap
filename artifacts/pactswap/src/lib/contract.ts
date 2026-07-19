@@ -1,9 +1,11 @@
 import { ethers } from "ethers";
 import contractABI from "./contractABI.json";
+import { connectWallet, BSC_CHAIN_ID } from "./wallet-provider";
 
+export { connectWallet } from "./wallet-provider";
 export const CONTRACT_ADDRESS = "0xCf9Fd90861085135f8661C29127A1F8F9ccA4061";
 export const USDT_ADDRESS = "0x55d398326f99059fF775485246999027B3197955";
-export const BSC_CHAIN_ID = 56;
+export { BSC_CHAIN_ID } from "./wallet-provider";
 
 const USDT_ABI = [
   "function approve(address spender, uint256 amount) external returns (bool)",
@@ -11,54 +13,6 @@ const USDT_ABI = [
   "function balanceOf(address account) external view returns (uint256)",
   "function decimals() external view returns (uint8)",
 ];
-
-declare global {
-  interface Window {
-    ethereum?: any;
-  }
-}
-
-/** Ensure MetaMask is connected and on BSC Mainnet. Returns the signer. */
-export async function connectWallet(): Promise<ethers.JsonRpcSigner> {
-  if (!window.ethereum) throw new Error("MetaMask is not installed.");
-
-  const provider = new ethers.BrowserProvider(window.ethereum);
-
-  // Request account access
-  await provider.send("eth_requestAccounts", []);
-
-  // Check chain
-  const network = await provider.getNetwork();
-  if (Number(network.chainId) !== BSC_CHAIN_ID) {
-    try {
-      await window.ethereum.request({
-        method: "wallet_switchEthereumChain",
-        params: [{ chainId: "0x38" }],
-      });
-    } catch (switchErr: any) {
-      // Chain not added — add BSC
-      if (switchErr.code === 4902) {
-        await window.ethereum.request({
-          method: "wallet_addEthereumChain",
-          params: [
-            {
-              chainId: "0x38",
-              chainName: "BNB Smart Chain",
-              nativeCurrency: { name: "BNB", symbol: "BNB", decimals: 18 },
-              rpcUrls: ["https://bsc-dataseed1.binance.org/"],
-              blockExplorerUrls: ["https://bscscan.com/"],
-            },
-          ],
-        });
-      } else {
-        throw switchErr;
-      }
-    }
-  }
-
-  const freshProvider = new ethers.BrowserProvider(window.ethereum);
-  return freshProvider.getSigner();
-}
 
 /** Return a read-only contract instance (no wallet needed). */
 export function getReadContract() {
