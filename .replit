@@ -26,3 +26,4 @@ channel = "stable-25_05"
 
 [userenv.shared]
 RESEND_FROM_EMAIL = "onboarding@resend.dev"
+VITE_WALLETCONNECT_PROJECT_ID = "8845b9496d446ad865c0aa2a22c4bbb8"

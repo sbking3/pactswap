@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from "@/components/ui/dialog";
-import { Loader2, Search, Star, ShieldCheck, ArrowDownUp, ExternalLink, TriangleAlert } from "lucide-react";
+import { Loader2, Search, Star, ShieldCheck, ArrowDownUp, ExternalLink } from "lucide-react";
 import { toast } from "sonner";
 import { useAuth } from "@/contexts/AuthContext";
 import { createEscrow } from "@/lib/contract";
