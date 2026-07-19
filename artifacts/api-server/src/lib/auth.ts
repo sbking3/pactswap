@@ -6,6 +6,10 @@ const JWT_SECRET = process.env.SESSION_SECRET ?? "pactswap-dev-secret";
 export interface JwtPayload {
   userId: string;
   walletAddress: string;
+  /** Checksummed wallet address — alias for walletAddress, required by order endpoints */
+  address: string;
+  /** Chain ID (56 = BSC Mainnet) */
+  chainId: number;
 }
 
 export function signToken(payload: JwtPayload): string {

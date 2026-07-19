@@ -148,7 +148,7 @@ router.post("/auth/verify-signup-otp", async (req, res) => {
     user = created[0];
   }
 
-  const token = signToken({ userId: user.id, walletAddress: user.walletAddress });
+  const token = signToken({ userId: user.id, walletAddress: user.walletAddress, address: user.walletAddress, chainId: 56 });
   res.json({ user, token });
 });
 
@@ -244,7 +244,7 @@ router.post("/auth/verify-otp", async (req, res) => {
     user = created[0];
   }
 
-  const token = signToken({ userId: user.id, walletAddress: user.walletAddress });
+  const token = signToken({ userId: user.id, walletAddress: user.walletAddress, address: user.walletAddress, chainId: 56 });
   res.json({ user, token });
 });
 
@@ -282,7 +282,7 @@ router.post("/auth/register", async (req, res) => {
   }).returning();
 
   const user = created[0];
-  const token = signToken({ userId: user.id, walletAddress: user.walletAddress });
+  const token = signToken({ userId: user.id, walletAddress: user.walletAddress, address: user.walletAddress, chainId: 56 });
   res.status(201).json({ user, token });
 });
 
@@ -330,7 +330,7 @@ router.post("/auth/siwe", async (req, res) => {
     }
   }
 
-  const token = signToken({ userId: user.id, walletAddress: user.walletAddress });
+  const token = signToken({ userId: user.id, walletAddress: user.walletAddress, address: user.walletAddress, chainId: 56 });
   res.json({ user, token, requires2FA: false });
 });
 

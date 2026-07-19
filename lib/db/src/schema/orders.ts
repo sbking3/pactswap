@@ -16,6 +16,12 @@ export const ordersTable = pgTable("orders", {
   // 0=created, 1=paid, 2=released, 3=cancelled, 4=disputed
   status: integer("status").default(0).notNull(),
   contractTx: text("contract_tx"),
+  // Order-level fields saved at creation time
+  email: text("email"),
+  token: text("token"),
+  sellerAddress: text("seller_address"),
+  buyerAddress: text("buyer_address"),
+  chainId: integer("chain_id"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });

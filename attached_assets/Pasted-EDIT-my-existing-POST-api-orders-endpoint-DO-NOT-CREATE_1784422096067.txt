@@ -1,0 +1,38 @@
+EDIT my existing POST /api/orders endpoint. DO NOT CREATE A NEW FILE.
+
+PROBLEM: Frontend is getting 400 {"error":"Missing field: email"} because we are not validating and logging properly.
+
+REQUIREMENTS - IMPLEMENT ALL:
+
+1. LOGGING: At start log "=== POST /api/orders === Body:" + JSON.stringify(req.body) + " | Wallet:" + req.user.address + " | Chain:" + req.user.chainId
+
+2. VALIDATION - Return 400 immediately if any fail. Log each failure with "✗ Validation failed:"
+   - email: required, non-empty string
+   - amount: required, number > 0  
+   - token: required, non-empty string
+   - sellerAddress: required, valid Ethereum address using ethers.isAddress()
+   - txHash: required, non-empty string
+   - wallet: required from req.user.address, valid Ethereum address
+   Error format: { "error": "Missing field: email" }
+
+3. TOKEN CONVERSION - Only after validation:
+   If token is USDT or USDC: decimals = 6 else decimals = 18
+   amountInUnits = ethers.parseUnits(amount.toString(), decimals)
+   Log: "✓ Converted X TOKEN to Y units (Z decimals)"
+
+4. SMART CONTRACT CALL - Inside try/catch:
+   await contractInstance.createEscrow(amountInUnits, ethers.getAddress(sellerAddress))
+   If it fails: return 400 with { "error": err.reason || err.message }
+   Log success: "✓ createEscrow succeeded: txHash"
+
+5. DATABASE SAVE - ONLY AFTER contract succeeds:
+   Save order with status:'active', email, amount, token, sellerAddress, buyerAddress:req.user.address, txHash, chainId:req.user.chainId
+   Use ethers.getAddress() to checksum addresses
+   If DB fails: return 500 with { "error": "Order created on-chain but failed to save locally", "txHash": "..." }
+   Log: "✓ Order saved with ID:"
+
+6. SUCCESS: Return 201 with { "success": true, "orderId": "...", "txHash": "..." }
+
+7. FLOW ORDER MUST BE: Log → Validate → Convert → Contract → DB → Success
+
+Use ethers v6. Assume contractInstance and db are already imported. Use res.status().json() or Response.json() depending on framework.

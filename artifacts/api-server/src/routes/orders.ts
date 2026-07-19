@@ -57,10 +57,10 @@ router.get("/orders", requireAuth, async (req, res) => {
 // POST /api/orders
 router.post("/orders", requireAuth, async (req, res) => {
   // ── 2. Log entire request at start ────────────────────────────────────────
-  const walletAddress = req.user!.walletAddress;
-  const chainId = 56; // BSC Mainnet
+  const walletAddress = req.user!.address ?? req.user!.walletAddress;
+  const chainId = req.user!.chainId ?? 56;
   logger.info(
-    `=== POST /api/orders === Request Body: ${JSON.stringify(req.body)} | Wallet: ${walletAddress} | Chain: ${chainId}`,
+    `=== POST /api/orders === Body: ${JSON.stringify(req.body)} | Wallet: ${walletAddress} | Chain: ${chainId}`,
   );
 
   // ── 1. Extract fields ─────────────────────────────────────────────────────
@@ -143,6 +143,11 @@ router.post("/orders", requireAuth, async (req, res) => {
         priceNaira: 0,
         status: 0,
         contractTx: contractTxHash,
+        email,
+        token,
+        sellerAddress: ethers.getAddress(sellerAddress),
+        buyerAddress: ethers.getAddress(walletAddress),
+        chainId,
       })
       .returning();
     savedOrder = inserted[0];
