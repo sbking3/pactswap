@@ -288,21 +288,27 @@ export default function Marketplace() {
             </div>
           )}
 
-          {/* Trust indicators */}
-          <div className="mx-1 mb-2 flex items-center justify-center gap-3 text-xs text-muted-foreground">
-            <a
-              href="https://bscscan.com/address/0xCf9Fd90861085135f8661C29127A1F8F9ccA4061#code"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="inline-flex items-center gap-1 hover:text-green-400 transition-colors"
-            >
-              <span>✅ Verified on BSCScan</span>
-              <ExternalLink className="w-2.5 h-2.5" />
-            </a>
-            <span className="text-border">|</span>
-            <span className="inline-flex items-center gap-1">
-              🔒 Escrow Contract
-            </span>
+          {/* Trust badge */}
+          <div className="bg-green-50 border border-green-200 rounded-lg p-3 mb-4 text-sm">
+            <div className="flex items-center gap-2 mb-1">
+              <span>✅</span>
+              <a
+                href="https://bscscan.com/address/0xCf9Fd90861085135f8661C29127A1F8F9ccA4061"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-green-700 font-semibold underline"
+              >
+                Verified on BSCScan
+              </a>
+            </div>
+            <div className="flex items-center gap-2 mb-1">
+              <span>🔒</span>
+              <span className="text-gray-700">Contract: 0xCf9F...A4061</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <span>💰</span>
+              <span className="text-gray-700">2.5% fee only on completion</span>
+            </div>
           </div>
 
           <DialogFooter>
