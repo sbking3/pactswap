@@ -288,27 +288,21 @@ export default function Marketplace() {
             </div>
           )}
 
-          {/* Safety banner */}
-          <div className="mx-1 mb-2 rounded-lg border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-xs text-amber-300 space-y-1">
-            <div className="flex items-center gap-1.5 font-semibold">
-              <TriangleAlert className="w-3.5 h-3.5 shrink-0" />
-              MAINNET TEST — REAL FUNDS
-            </div>
-            <div className="flex flex-wrap gap-x-3 gap-y-0.5 text-amber-400/80">
-              <a
-                href={`https://bscscan.com/address/0xCf9Fd90861085135f8661C29127A1F8F9ccA4061`}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="inline-flex items-center gap-0.5 hover:text-amber-300 underline underline-offset-2"
-              >
-                Contract 0xCf9…4061
-                <ExternalLink className="w-2.5 h-2.5" />
-              </a>
-              <span>·</span>
-              <span>Funds held in escrow on-chain</span>
-              <span>·</span>
-              <span className="font-medium text-amber-300">Start with $1 only</span>
-            </div>
+          {/* Trust indicators */}
+          <div className="mx-1 mb-2 flex items-center justify-center gap-3 text-xs text-muted-foreground">
+            <a
+              href="https://bscscan.com/address/0xCf9Fd90861085135f8661C29127A1F8F9ccA4061#code"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center gap-1 hover:text-green-400 transition-colors"
+            >
+              <span>✅ Verified on BSCScan</span>
+              <ExternalLink className="w-2.5 h-2.5" />
+            </a>
+            <span className="text-border">|</span>
+            <span className="inline-flex items-center gap-1">
+              🔒 Escrow Contract
+            </span>
           </div>
 
           <DialogFooter>

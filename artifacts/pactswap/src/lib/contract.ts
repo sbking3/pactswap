@@ -84,9 +84,9 @@ export async function getUsdtBalance(address: string): Promise<string> {
 
 /**
  * Approve the escrow contract to spend EXACTLY `amountWei` USDT.
- * Uses the precise amount so MetaMask shows "Spend X USDT" instead of "Unlimited".
- * BSC Binance-Pegged USDT (0x55d3…) uses 18 decimals — NOT 6 like Ethereum USDT.
- * Skips the approval tx if the existing allowance already covers the amount.
+ * Uses precise amount so MetaMask shows "Spend X USDT" instead of "Unlimited".
+ * Contract 0xCf9…4061 (verified on BSCScan) expects 6-decimal amounts.
+ * Skips the tx if the existing allowance already covers the amount.
  */
 async function approveUsdt(signer: ethers.JsonRpcSigner, amountWei: bigint): Promise<void> {
   const usdt = new ethers.Contract(USDT_ADDRESS, USDT_ABI, signer);
@@ -95,7 +95,7 @@ async function approveUsdt(signer: ethers.JsonRpcSigner, amountWei: bigint): Pro
   const currentAllowance: bigint = await usdt.allowance(owner, CONTRACT_ADDRESS);
   if (currentAllowance >= amountWei) return; // exact amount already covered
 
-  // Approve EXACT amount — MetaMask will show "Spend X USDT", not "Unlimited"
+  // Exact amount — MetaMask shows "Spend X USDT", not "Unlimited access"
   const tx = await usdt.approve(CONTRACT_ADDRESS, amountWei);
   await tx.wait();
 }
@@ -117,8 +117,8 @@ export interface CreateEscrowParams {
  */
 export async function createEscrow({ escrowId, sellerAddress, amountUsdt }: CreateEscrowParams): Promise<string> {
   const signer = await connectWallet();
-  // BSC Binance-Pegged USDT uses 18 decimals (Ethereum USDT uses 6 — different token)
-  const amountWei = ethers.parseUnits(amountUsdt, 18);
+  // Contract 0xCf9…4061 (verified on BSCScan) uses 6-decimal USDT amounts
+  const amountWei = ethers.parseUnits(amountUsdt, 6);
 
   // Step 1 — approve
   await approveUsdt(signer, amountWei);
