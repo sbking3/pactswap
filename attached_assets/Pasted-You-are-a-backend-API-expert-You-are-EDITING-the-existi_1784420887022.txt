@@ -1,0 +1,62 @@
+You are a backend API expert. You are EDITING the existing POST /api/orders endpoint in my Replit project. DO NOT CREATE A NEW FILE. 
+
+CONTEXT: This is an Express/Next.js API route. `contractInstance` and `db` are already imported at the top of the file. `req.user.address` and `req.user.chainId` come from auth middleware.
+
+TASK: Replace the entire POST /api/orders function to meet ALL 10 requirements below. 
+
+REQUIREMENTS:
+
+1. ROUTE: POST /api/orders accepting JSON body with: email, amount, token, sellerAddress, txHash
+
+2. LOGGING (at start of request):
+   Log entire req.body
+   Log wallet address (from req.user.address)
+   Log chainId (from req.user.chainId)
+   Example: "=== POST /api/orders === Request Body: {...} | Wallet: 0x... | Chain: 56"
+
+3. VALIDATION (return HTTP 400 for ANY failure):
+   email: required, non-empty string
+   amount: required, number > 0
+   token: required, non-empty string
+   sellerAddress: required, valid Ethereum address (use ethers.isAddress())
+   txHash: required, non-empty string
+   wallet address: required, valid Ethereum address
+   Error format: { "error": "Missing field: fieldName" } or { "error": "sellerAddress must be a valid Ethereum address" }
+   CRITICAL: Validate BEFORE calling contract. Log each validation failure with "✗ Validation failed: ..."
+
+4. TOKEN CONVERSION (only after validation passes):
+   USDT: 6 decimals → ethers.parseUnits(amount.toString(), 6)
+   USDC: 6 decimals
+   ETH/BNB: 18 decimals
+   Default: 18 decimals
+   Do NOT double-convert. Log: "✓ Converted 1 USDT to 1000000 units (6 decimals)"
+
+5. SMART CONTRACT CALL (inside try/catch):
+   Call: await contractInstance.createEscrow(amountInUnits, sellerAddress)
+   On error: return HTTP 400 with { "error": err.reason || err.message }
+   Preserve exact contract error message
+   Log success and all errors
+
+6. DATABASE SAVE (ONLY AFTER contract succeeds):
+   Do NOT save before contract call
+   Do NOT save if contract fails
+   Save with: status='active', email, amount, token, sellerAddress, buyerAddress (wallet), txHash, chainId, createdAt, updatedAt
+   Use ethers.getAddress() to checksum addresses
+   If save fails: return HTTP 500 with { "error": "Order created on-chain but failed to save locally", "txHash": "0x..." }
+
+7. SUCCESS RESPONSE (HTTP 201):
+   Only after database save succeeds
+   Format: { "success": true, "orderId": "...", "txHash": "0x..." }
+
+8. COMPREHENSIVE LOGGING:
+   Log every validation failure
+   Log every step: "✓ All validations passed", "✓ Converted...", "✓ createEscrow succeeded", "✓ Order saved"
+
+9. ERROR MESSAGE PRESERVATION:
+   ALWAYS return contract's exact error: { "error": err.reason || err.message }
+   Never genericize contract errors
+
+10. FLOW ORDER (non-negotiable):
+    Extract & log → Validate all fields → Validate wallet → Convert amount → Try contract call → If success, save DB → Return 201
+
+Return only the corrected code for the POST function. Use Response.json() if Next.js, or res.status().json() if Express.

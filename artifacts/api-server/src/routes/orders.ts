@@ -1,9 +1,10 @@
 import { Router } from "express";
+import { ethers } from "ethers";
 import { db } from "@workspace/db";
 import { ordersTable, offersTable, usersTable, disputesTable } from "@workspace/db";
 import { eq, or } from "drizzle-orm";
 import { requireAuth } from "../middlewares/authMiddleware";
-import { releaseEscrow } from "../lib/contract";
+import { getContract, releaseEscrow } from "../lib/contract";
 import { logger } from "../lib/logger";
 
 const router = Router();
@@ -55,41 +56,108 @@ router.get("/orders", requireAuth, async (req, res) => {
 
 // POST /api/orders
 router.post("/orders", requireAuth, async (req, res) => {
-  const { offerId, escrowId, amountUsdt, contractTx } = req.body;
-  if (!offerId || !escrowId || !amountUsdt || !contractTx) {
-    res.status(400).json({ error: "offerId, escrowId, amountUsdt, and contractTx are required" });
+  // ── 2. Log entire request at start ────────────────────────────────────────
+  const walletAddress = req.user!.walletAddress;
+  const chainId = 56; // BSC Mainnet
+  logger.info(
+    `=== POST /api/orders === Request Body: ${JSON.stringify(req.body)} | Wallet: ${walletAddress} | Chain: ${chainId}`,
+  );
+
+  // ── 1. Extract fields ─────────────────────────────────────────────────────
+  const { email, amount, token, sellerAddress, txHash } = req.body;
+
+  // ── 3. Validate all fields (return 400 on any failure) ───────────────────
+  const fail = (msg: string): false => {
+    logger.warn(`✗ Validation failed: ${msg}`);
+    res.status(400).json({ error: msg });
+    return false;
+  };
+
+  if (!email || typeof email !== "string" || !email.trim())
+    return void fail("Missing field: email");
+  if (amount === undefined || amount === null)
+    return void fail("Missing field: amount");
+  if (typeof amount !== "number" || amount <= 0)
+    return void fail("amount must be a number greater than 0");
+  if (!token || typeof token !== "string" || !token.trim())
+    return void fail("Missing field: token");
+  if (!sellerAddress || typeof sellerAddress !== "string" || !sellerAddress.trim())
+    return void fail("Missing field: sellerAddress");
+  if (!ethers.isAddress(sellerAddress))
+    return void fail("sellerAddress must be a valid Ethereum address");
+  if (!txHash || typeof txHash !== "string" || !txHash.trim())
+    return void fail("Missing field: txHash");
+  if (!ethers.isAddress(walletAddress))
+    return void fail("Wallet address must be a valid Ethereum address");
+
+  logger.info("✓ All validations passed");
+
+  // ── 4. Token → unit conversion ────────────────────────────────────────────
+  const tokenUpper = token.toUpperCase();
+  const decimals = tokenUpper === "USDT" || tokenUpper === "USDC" ? 6 : 18;
+  const amountInUnits = ethers.parseUnits(amount.toString(), decimals);
+  logger.info(
+    `✓ Converted ${amount} ${tokenUpper} to ${amountInUnits.toString()} units (${decimals} decimals)`,
+  );
+
+  // ── 5. Smart contract call (validate first, never before) ─────────────────
+  const escrowId = ethers.id(crypto.randomUUID()); // deterministic bytes32
+  let contractTxHash: string;
+  try {
+    const contract = getContract(true);
+    const tx = await contract.createEscrow(
+      escrowId,
+      ethers.getAddress(sellerAddress),
+      amountInUnits,
+    );
+    await tx.wait();
+    contractTxHash = tx.hash as string;
+    logger.info(`✓ createEscrow succeeded — txHash: ${contractTxHash}`);
+  } catch (err: any) {
+    const errMsg: string = err?.reason || err?.message || "Contract call failed";
+    logger.error({ errMsg, escrowId }, "✗ createEscrow failed");
+    res.status(400).json({ error: errMsg });
     return;
   }
 
-  const offers = await db.select().from(offersTable).where(eq(offersTable.id, offerId));
-  if (offers.length === 0) {
-    res.status(404).json({ error: "Offer not found" });
-    return;
-  }
-  const offer = offers[0];
-
-  if (!offer.isActive) {
-    res.status(400).json({ error: "Offer is no longer active" });
-    return;
-  }
-  if (offer.sellerId === req.user!.userId) {
-    res.status(400).json({ error: "Cannot buy your own offer" });
+  // ── 6. Database save — ONLY after contract succeeds ───────────────────────
+  // Resolve seller user record by wallet address
+  const sellers = await db
+    .select()
+    .from(usersTable)
+    .where(eq(usersTable.walletAddress, sellerAddress.toLowerCase()));
+  if (sellers.length === 0) {
+    res.status(400).json({ error: "Seller wallet address not registered on the platform" });
     return;
   }
 
-  const order = await db.insert(ordersTable).values({
-    escrowId,
-    offerId,
-    buyerId: req.user!.userId,
-    sellerId: offer.sellerId,
-    amountUsdt,
-    priceNaira: offer.priceNaira,
-    status: 0,
-    contractTx,
-  }).returning();
+  let savedOrder: typeof ordersTable.$inferSelect;
+  try {
+    const inserted = await db
+      .insert(ordersTable)
+      .values({
+        escrowId,
+        buyerId: req.user!.userId,
+        sellerId: sellers[0].id,
+        amountUsdt: amount,
+        priceNaira: 0,
+        status: 0,
+        contractTx: contractTxHash,
+      })
+      .returning();
+    savedOrder = inserted[0];
+    logger.info(`✓ Order saved — orderId: ${savedOrder.id}`);
+  } catch (err: any) {
+    logger.error({ err: err?.message }, "✗ DB save failed after on-chain success");
+    res.status(500).json({
+      error: "Order created on-chain but failed to save locally",
+      txHash: contractTxHash,
+    });
+    return;
+  }
 
-  const enriched = await enrichOrder(order[0]);
-  res.status(201).json(enriched);
+  // ── 7. Success (HTTP 201, only after DB save) ─────────────────────────────
+  res.status(201).json({ success: true, orderId: savedOrder.id, txHash: contractTxHash });
 });
 
 // GET /api/orders/:id
