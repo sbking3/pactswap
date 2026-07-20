@@ -1,0 +1,83 @@
+UPDATE PACTSWAP.replit.app - FIX "WALLET NOT DETECTED" ERROR
+
+GOAL: Remove "MetaMask or Web3 wallet not detected" error. Add WalletConnect so Chrome Mobile works. Auto-fill wallet address in Create Account form.
+
+=== STEP 1: ADD TO <head> ===
+<script src="https://cdn.jsdelivr.net/npm/web3@1.10.4/dist/web3.min.js"></script>
+<script src="https://unpkg.com/@walletconnect/web3-provider@1.8.0/dist/umd/index.min.js"></script>
+
+=== STEP 2: DELETE THE OLD ERROR MESSAGE ===
+Find and DELETE this line everywhere:
+"MetaMask or Web3 wallet not detected. Please install a wallet extension."
+
+=== STEP 3: REPLACE YOUR connectWallet() FUNCTION WITH THIS ===
+let provider;
+let web3;
+let accounts;
+
+async function connectWallet() {
+  document.getElementById("connectButton").innerText = "Connecting...";
+
+  try {
+    // 1. If MetaMask/Trust extension exists
+    if (window.ethereum) {
+      provider = window.ethereum;
+    }
+    // 2. If NO extension, use WalletConnect for Chrome
+    else {
+      provider = new WalletConnectProvider.default({
+        rpc: { 56: "https://bsc-dataseed.binance.org/" },
+        chainId: 56,
+        qrcodeModalOptions: { mobileLinks: ["metamask", "trust"] }
+      });
+      await provider.enable();
+    }
+
+    web3 = new Web3(provider);
+    accounts = await web3.eth.getAccounts();
+
+    // Force BSC Network
+    await switchToBSC();
+
+    // 3. UPDATE BUTTON + FORM
+    document.getElementById("connectButton").innerText = accounts[0].substring(0,6) + "..." + accounts[0].substring(38);
+    if(document.getElementById("walletAddress")) {
+      document.getElementById("walletAddress").value = accounts[0];
+    }
+
+    loadUserData(); // refresh balances
+
+    // 4. LISTENERS TO PREVENT STUCK LOADING
+    provider.on("accountsChanged", () => window.location.reload());
+    provider.on("chainChanged", () => window.location.reload());
+    provider.on("disconnect", () => window.location.reload());
+
+  } catch (error) {
+    document.getElementById("connectButton").innerText = "Connect Wallet";
+    alert("Connection cancelled");
+    console.error(error);
+  }
+}
+
+async function switchToBSC() {
+  try {
+    await provider.request({ method: 'wallet_switchEthereumChain', params: [{ chainId: '0x38' }] });
+  } catch (switchError) {
+    if (switchError.code === 4902) {
+      await provider.request({ method: 'wallet_addEthereumChain', params: [{
+        chainId: '0x38',
+        chainName: 'BSC Mainnet',
+        rpcUrls: ['https://bsc-dataseed.binance.org/'],
+        nativeCurrency: {name: 'BNB', symbol: 'BNB', decimals: 18}
+      }]})
+    }
+  }
+}
+
+=== STEP 4: ADD THIS TO CREATE ACCOUNT FORM ===
+<input type="hidden" id="walletAddress" name="walletAddress" />
+
+=== STEP 5: KEEP ALL YOUR OTHER CODE ===
+Don't change escrow contract, UI, or styling. Only replace connect logic.
+
+TEST: Open in Chrome Mobile → Tap Connect Wallet → Should show WalletConnect popup, NOT red error.

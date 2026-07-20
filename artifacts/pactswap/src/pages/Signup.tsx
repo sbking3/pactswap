@@ -6,6 +6,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { toast } from "sonner";
 import { Loader2, Wallet, ArrowRight, ShieldCheck, AlertTriangle, RefreshCw } from "lucide-react";
+import { getEip1193Provider } from "@/lib/wallet-provider";
 
 async function apiPost(path: string, body: object) {
   const token = localStorage.getItem("pactswap_token");
@@ -36,6 +37,7 @@ export default function Signup() {
   const [devCode, setDevCode] = useState<string | null>(null);
   const [attemptsLeft, setAttemptsLeft] = useState<number | null>(null);
   const [blockedUntil, setBlockedUntil] = useState<Date | null>(null);
+  const [isConnecting, setIsConnecting] = useState(false);
   const [sendLoading, setSendLoading] = useState(false);
   const [verifyLoading, setVerifyLoading] = useState(false);
 
@@ -61,17 +63,22 @@ export default function Signup() {
 
   const handleConnectWallet = async () => {
     try {
-      if (!window.ethereum) {
-        toast.error("MetaMask or Web3 wallet not detected. Please install a wallet extension.");
-        return;
-      }
-      const accounts = await window.ethereum.request({ method: "eth_requestAccounts" });
+      setIsConnecting(true);
+      // Works for MetaMask (desktop) AND WalletConnect (Chrome mobile, no extension)
+      const eip1193 = await getEip1193Provider();
+      const accounts: string[] = await eip1193.request({ method: "eth_requestAccounts" });
       if (accounts?.[0]) {
         setWalletAddress(accounts[0]);
         toast.success("Wallet connected!");
       }
     } catch (error: any) {
-      toast.error(error.message || "Failed to connect wallet.");
+      const msg =
+        error?.code === 4001 || error?.message?.includes("rejected")
+          ? "Connection cancelled"
+          : error?.message || "Failed to connect wallet";
+      toast.error(msg);
+    } finally {
+      setIsConnecting(false);
     }
   };
 
