@@ -201,14 +201,24 @@ export default function Signup() {
                   <ShieldCheck className="h-5 w-5 flex-shrink-0" />
                 </div>
               ) : (
-                <Button
-                  type="button"
-                  variant="outline"
-                  className="w-full border-border border-dashed hover:border-primary/50 hover:bg-primary/5 hover:text-primary transition-all h-12"
-                  onClick={handleConnectWallet}
-                >
-                  <Wallet className="mr-2 h-5 w-5" /> Connect Wallet
-                </Button>
+                <div className="space-y-2">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className="w-full border-border border-dashed hover:border-primary/50 hover:bg-primary/5 hover:text-primary transition-all h-12"
+                    onClick={handleConnectWallet}
+                    disabled={isConnecting}
+                  >
+                    {isConnecting
+                      ? <Loader2 className="mr-2 h-5 w-5 animate-spin" />
+                      : <Wallet className="mr-2 h-5 w-5" />}
+                    {isConnecting ? "Connecting…" : "Connect Wallet"}
+                  </Button>
+                  <p className="text-[11px] text-center text-muted-foreground">
+                    MetaMask extension detected automatically.
+                    No extension? WalletConnect QR opens instead.
+                  </p>
+                </div>
               )}
             </div>
 
