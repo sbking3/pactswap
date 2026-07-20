@@ -15,6 +15,13 @@ import EthereumProvider from "@walletconnect/ethereum-provider";
 export const BSC_CHAIN_ID = 56;
 const BSC_RPC = "https://bsc-dataseed1.binance.org/";
 
+/** True when running on a mobile browser without an injected wallet */
+export function isMobileWithoutWallet(): boolean {
+  if (typeof window === "undefined") return false;
+  const mobile = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
+  return mobile && !window.ethereum;
+}
+
 // Singleton WalletConnect provider (re-used across calls)
 let _wcProvider: InstanceType<typeof EthereumProvider> | null = null;
 

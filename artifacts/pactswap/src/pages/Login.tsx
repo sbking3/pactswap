@@ -11,9 +11,11 @@ import {
   getEip1193Provider,
   addWalletEventListeners,
   removeWalletEventListeners,
+  isMobileWithoutWallet,
   type WalletEventCallbacks,
 } from "@/lib/wallet-provider";
 import { CreateAccountModal } from "@/components/CreateAccountModal";
+import { WalletGuideModal } from "@/components/WalletGuideModal";
 
 /** Shorten 0x1234…ABCD */
 function shortAddr(addr: string) {
@@ -49,6 +51,9 @@ export default function Login() {
   // Account-creation modal
   const [showCreateAccount, setShowCreateAccount] = useState(false);
   const [pendingAddress, setPendingAddress] = useState<string | null>(null);
+
+  // Mobile wallet guide
+  const [showWalletGuide, setShowWalletGuide] = useState(false);
 
   const siweMutation = useSiweLogin();
 
@@ -117,10 +122,15 @@ export default function Login() {
   // ─── Connect & sign ──────────────────────────────────────────────────────────
 
   const handleConnectAndSign = async () => {
+    // Chrome mobile without an injected wallet → show deep links instead of
+    // WalletConnect QR (which can't be scanned from the same screen)
+    if (isMobileWithoutWallet()) {
+      setShowWalletGuide(true);
+      return;
+    }
     try {
       setIsConnecting(true);
 
-      // Resolves MetaMask (desktop) or opens WalletConnect modal (mobile / no extension)
       const eip1193 = await getEip1193Provider();
 
       const accounts: string[] = await eip1193.request({ method: "eth_requestAccounts" });
@@ -224,6 +234,9 @@ export default function Login() {
 
   return (
     <>
+      {/* ── Wallet guide (mobile Chrome without extension) ── */}
+      <WalletGuideModal open={showWalletGuide} onClose={() => setShowWalletGuide(false)} />
+
       {/* ── Account creation modal ── */}
       {showCreateAccount && pendingAddress && (
         <CreateAccountModal

@@ -6,7 +6,8 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { toast } from "sonner";
 import { Loader2, Wallet, ArrowRight, ShieldCheck, AlertTriangle, RefreshCw } from "lucide-react";
-import { getEip1193Provider } from "@/lib/wallet-provider";
+import { getEip1193Provider, isMobileWithoutWallet } from "@/lib/wallet-provider";
+import { WalletGuideModal } from "@/components/WalletGuideModal";
 
 async function apiPost(path: string, body: object) {
   const token = localStorage.getItem("pactswap_token");
@@ -38,6 +39,7 @@ export default function Signup() {
   const [attemptsLeft, setAttemptsLeft] = useState<number | null>(null);
   const [blockedUntil, setBlockedUntil] = useState<Date | null>(null);
   const [isConnecting, setIsConnecting] = useState(false);
+  const [showWalletGuide, setShowWalletGuide] = useState(false);
   const [sendLoading, setSendLoading] = useState(false);
   const [verifyLoading, setVerifyLoading] = useState(false);
 
@@ -62,9 +64,14 @@ export default function Signup() {
   useEffect(() => () => { if (cooldownRef.current) clearInterval(cooldownRef.current); }, []);
 
   const handleConnectWallet = async () => {
+    // Chrome mobile (and other mobile browsers) without an injected wallet:
+    // show deep links to open in MetaMask / Trust Wallet browser instead
+    if (isMobileWithoutWallet()) {
+      setShowWalletGuide(true);
+      return;
+    }
     try {
       setIsConnecting(true);
-      // Works for MetaMask (desktop) AND WalletConnect (Chrome mobile, no extension)
       const eip1193 = await getEip1193Provider();
       const accounts: string[] = await eip1193.request({ method: "eth_requestAccounts" });
       if (accounts?.[0]) {
@@ -184,6 +191,8 @@ export default function Signup() {
   const blockedMins = blockedUntil ? Math.ceil((blockedUntil.getTime() - Date.now()) / 60000) : 0;
 
   return (
+    <>
+    <WalletGuideModal open={showWalletGuide} onClose={() => setShowWalletGuide(false)} />
     <div className="flex-1 flex items-center justify-center p-4">
       <div className="w-full max-w-md bg-card p-8 rounded-xl border border-border shadow-xl">
         <div className="text-center mb-8">
@@ -215,8 +224,8 @@ export default function Signup() {
                     {isConnecting ? "Connecting…" : "Connect Wallet"}
                   </Button>
                   <p className="text-[11px] text-center text-muted-foreground">
-                    MetaMask extension detected automatically.
-                    No extension? WalletConnect QR opens instead.
+                    Desktop with MetaMask extension: connects automatically.{" "}
+                    Mobile Chrome: tap for wallet browser guide.
                   </p>
                 </div>
               )}
@@ -345,5 +354,6 @@ export default function Signup() {
         )}
       </div>
     </div>
+    </>
   );
 }
