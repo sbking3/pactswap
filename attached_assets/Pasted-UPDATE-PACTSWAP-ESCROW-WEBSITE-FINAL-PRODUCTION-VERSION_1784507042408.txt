@@ -1,0 +1,84 @@
+UPDATE PACTSWAP ESCROW WEBSITE - FINAL PRODUCTION VERSION
+
+GOAL: Add perfect WalletConnect v1 + PWA + Account Creation. Fix "stuck loading after connect". Keep ALL existing escrow UI, styling, and contract logic 100% the same.
+
+=== 1. ADD TO <head> ===
+<script src="https://cdn.jsdelivr.net/npm/web3@1.10.4/dist/web3.min.js"></script>
+<script src="https://unpkg.com/@walletconnect/web3-provider@1.8.0/dist/umd/index.min.js"></script>
+<link rel="manifest" href="/manifest.json">
+<meta name="theme-color" content="#000">
+
+=== 2. CONNECT WALLET LOGIC - MUST WORK PERFECT ===
+Create a global function: connectWallet()
+
+Rules:
+A. If window.ethereum exists: use it. This is MetaMask extension.
+B. If NO window.ethereum: use WalletConnectProvider
+   const provider = new WalletConnectProvider({
+     rpc: { 56: "https://bsc-dataseed.binance.org/" },
+     chainId: 56,
+     qrcodeModalOptions: { mobileLinks: ["metamask", "trust"] }
+   })
+   await provider.enable()
+
+C. After connect:
+   - Set: window.web3 = new Web3(provider)
+   - Get accounts: const accounts = await web3.eth.getAccounts()
+   - Show button text: accounts[0].substring(0,6) + "..." + accounts[0].substring(38)
+   - Hide "Connecting..."
+   - Call: switchToBSC()
+
+D. Force BSC Network:
+   async function switchToBSC() {
+     try {
+       await provider.request({ method: 'wallet_switchEthereumChain', params: [{ chainId: '0x38' }] })
+     } catch (e) {
+       if (e.code === 4902) {
+         await provider.request({ method: 'wallet_addEthereumChain', params: [{ chainId: '0x38', chainName: 'BSC Mainnet', rpcUrls: ['https://bsc-dataseed.binance.org/'], nativeCurrency: {name: 'BNB', symbol: 'BNB', decimals: 18}}]})
+       }
+     }
+   }
+
+=== 3. CRITICAL: FIX "STUCK LOADING" BUG ===
+Add these 3 event listeners right after connect:
+provider.on("accountsChanged", (accounts) => { window.location.reload() })
+provider.on("chainChanged", (chainId) => { window.location.reload() })
+provider.on("disconnect", () => { resetButtonToConnect() })
+
+After wallet connects, IMMEDIATELY call loadUserData() to refresh balances and escrow data.
+
+=== 4. CREATE ACCOUNT SYSTEM ===
+After wallet connects successfully:
+A. Check localStorage for "pactswap_user_" + walletAddress
+B. If NOT found: Show popup "Create PACTSWAP Account"
+   Fields: Username, Email. Save to localStorage + backend DB
+C. If found: Load account and show "Welcome back, Username"
+D. Every escrow contract call must use: { from: accounts[0] }
+
+=== 5. UI HELPER MESSAGE ===
+Under Connect Wallet button add:
+<p style="font-size:12px; margin-top:8px">«New to crypto? <a href="https://play.google.com/store/apps/details?id=io.metamask" target="_blank">Download MetaMask</a> or <a href="https://play.google.com/store/apps/details?id=com.wallet.crypto.trustapp" target="_blank">Download Trust Wallet</a>»</p>
+
+=== 6. CONTRACT INTEGRATION ===
+Escrow Contract: 0xCf9Fd90861085135f8661C29127A1F8F9ccA4061
+Use the SAME `window.web3` instance for:
+- Reading balances
+- Reading token balances
+- USDT approve()
+- Signing transactions
+- Sending transactions
+- All existing escrow functions
+
+DO NOT change any function names.
+
+=== 7. PWA ===
+Create manifest.json and service-worker.js so users can "Add to Home Screen". App must work offline and open full-screen.
+
+=== 8. ERROR HANDLING ===
+Show toast messages for:
+- User rejects connection: "Connection cancelled"
+- Wrong network: "Please switch to BSC"
+- WalletConnect disconnect: "Wallet disconnected"
+Never freeze or break the page.
+
+TEST ON: Chrome Mobile, Safari, MetaMask App Browser, Trust Wallet Browser. Must not get stuck on "Connecting..."

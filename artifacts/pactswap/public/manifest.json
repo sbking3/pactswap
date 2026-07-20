@@ -1,0 +1,25 @@
+{
+  "name": "PACTSWAP",
+  "short_name": "PACTSWAP",
+  "description": "P2P USDT escrow trading on BNB Smart Chain — secure, fast, non-custodial.",
+  "start_url": "/",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#000000",
+  "theme_color": "#f5a623",
+  "categories": ["finance", "crypto"],
+  "icons": [
+    {
+      "src": "/favicon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    },
+    {
+      "src": "/favicon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "maskable"
+    }
+  ]
+}
