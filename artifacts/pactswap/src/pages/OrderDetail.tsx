@@ -3,11 +3,12 @@ import { useRoute, Link } from "wouter";
 import {
   useGetOrder,
   useMarkOrderPaid,
-  useConfirmPayment,
+  confirmPayment,
   useOpenDispute,
   useGetMe,
   getGetOrderQueryKey,
 } from "@workspace/api-client-react";
+import { confirmDelivery } from "@/lib/contract";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -152,11 +153,11 @@ export default function OrderDetail() {
   });
 
   const markPaidMutation = useMarkOrderPaid();
-  const confirmPaymentMutation = useConfirmPayment();
   const openDisputeMutation = useOpenDispute();
 
   const [disputeOpen, setDisputeOpen] = useState(false);
   const [disputeReason, setDisputeReason] = useState("");
+  const [releaseLoading, setReleaseLoading] = useState(false);
 
   const countdown = useCountdown(order?.createdAt?.toString());
 
@@ -174,25 +175,51 @@ export default function OrderDetail() {
   const totalNaira = (order.priceNaira ?? 0) * order.amountUsdt;
   const counterparty = isBuyer ? order.seller : order.buyer;
 
+  // Buyer: mark payment sent — no blockchain, just a DB status update
   const handleMarkPaid = () => {
-    markPaidMutation.mutate({ data: { orderId: order.id } }, {
+    markPaidMutation.mutate({ id: order.id }, {
       onSuccess: () => { toast.success("Marked as paid. Waiting for seller."); refetch(); },
-      onError: (e: any) => toast.error(e.error || "Action failed"),
+      onError: (e: any) => toast.error((e as any)?.data?.error ?? (e as any)?.message ?? "Action failed"),
     });
   };
 
-  const handleConfirmPayment = () => {
-    confirmPaymentMutation.mutate({ data: { orderId: order.id } }, {
-      onSuccess: () => { toast.success("USDT released from escrow!"); refetch(); },
-      onError: (e: any) => toast.error(e.error || "Action failed"),
-    });
+  // Seller: two steps — (1) sign confirmDelivery on-chain → (2) tell server the txHash
+  const handleRelease = async () => {
+    if (!order.escrowId) { toast.error("Missing escrow ID."); return; }
+    setReleaseLoading(true);
+    try {
+      // Step 1: open MetaMask — seller signs the on-chain release
+      toast.info("Opening wallet — sign the release transaction.");
+      const txHash = await confirmDelivery(order.escrowId);
+
+      // Step 2: record the confirmed tx on the server (read-only verify + DB update)
+      toast.info("Transaction confirmed — updating trade status…");
+      await confirmPayment(order.id, {
+        method: "PATCH",
+        body: JSON.stringify({ txHash }),
+        headers: { "Content-Type": "application/json" },
+      } as RequestInit);
+
+      toast.success("USDT released! Trade complete. 🎉");
+      refetch();
+    } catch (err: any) {
+      // User rejected MetaMask, or RPC/server error
+      const msg =
+        err?.data?.error ??
+        err?.reason ??
+        err?.message ??
+        "Release failed — please try again.";
+      toast.error(msg);
+    } finally {
+      setReleaseLoading(false);
+    }
   };
 
   const handleOpenDispute = () => {
     if (!disputeReason) { toast.error("Please describe the issue."); return; }
-    openDisputeMutation.mutate({ data: { orderId: order.id, reason: disputeReason } }, {
+    openDisputeMutation.mutate({ id: order.id, data: { reason: disputeReason } }, {
       onSuccess: () => { toast.success("Dispute opened. Admin will review."); setDisputeOpen(false); refetch(); },
-      onError: (e: any) => toast.error(e.error || "Failed"),
+      onError: (e: any) => toast.error((e as any)?.data?.error ?? (e as any)?.message ?? "Failed"),
     });
   };
 
@@ -381,14 +408,20 @@ export default function OrderDetail() {
               )}
 
               {isSeller && order.status === 1 && (
-                <Button
-                  className="w-full h-12 bg-primary hover:bg-primary/90 text-black font-bold text-base"
-                  onClick={handleConfirmPayment}
-                  disabled={confirmPaymentMutation.isPending}
-                >
-                  {confirmPaymentMutation.isPending && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
-                  Release USDT
-                </Button>
+                <>
+                  <div className="p-3 bg-amber-500/10 border border-amber-500/30 rounded-lg text-xs text-amber-400 text-center">
+                    <AlertCircle className="w-3.5 h-3.5 inline mr-1 mb-0.5" />
+                    Buyer has marked payment as sent. Verify your bank before releasing.
+                  </div>
+                  <Button
+                    className="w-full h-12 bg-primary hover:bg-primary/90 text-black font-bold text-base"
+                    onClick={handleRelease}
+                    disabled={releaseLoading}
+                  >
+                    {releaseLoading && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
+                    {releaseLoading ? "Waiting for wallet…" : "Confirm Payment & Release USDT"}
+                  </Button>
+                </>
               )}
 
               {isSeller && order.status === 0 && (
