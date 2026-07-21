@@ -1,13 +1,14 @@
 import { ethers } from "ethers";
 import { logger } from "./logger";
 
-export const CONTRACT_ADDRESS = "0x8aAcD32511ef4902939541b5E9EFb6Ff6cae7AFF";
+export const CONTRACT_ADDRESS = "0x3FE1bAbd4aC5bB5107767d913e6d4A2b63D4385d";
 export const USDT_ADDRESS = "0x55d398326f99059fF775485246999027B3197955";
 const BSC_RPC = "https://bsc-dataseed1.binance.org/";
 
 const ABI = [
   // Read-only
   "function escrows(bytes32) external view returns (address buyer, address seller, uint256 amount, uint256 createdAt, bool released, bool refunded, bool sellerConfirmed)",
+  "function lockEscrowBySeller(bytes32 _escrowId, address _buyer, uint256 _amount) external",
   "function getActiveEscrowCount() external view returns (uint256)",
   "function activeEscrowIds(uint256) external view returns (bytes32)",
   "function arbiter() external view returns (address)",

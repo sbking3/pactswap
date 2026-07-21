@@ -100,6 +100,42 @@ contract PactSwapEscrow is ReentrancyGuard {
         emit EscrowCreated(_escrowId, msg.sender, _seller, _amount);
     }
 
+    // ── Seller: lock USDT into escrow for a buyer-initiated order ────────────
+    /**
+     * @notice Called by the seller to lock USDT for a buyer-initiated trade.
+     *         Mirrors createEscrow() but msg.sender is the seller, not the buyer.
+     *         USDT is transferred FROM the seller's wallet INTO the contract.
+     *         When releaseEscrow() is later called, USDT goes to _buyer.
+     */
+    function lockEscrowBySeller(
+        bytes32 _escrowId,
+        address _buyer,
+        uint256 _amount
+    ) external nonReentrant {
+        require(escrows[_escrowId].buyer == address(0), "Escrow already exists");
+        require(_buyer != address(0),      "Invalid buyer");
+        require(_buyer != msg.sender,      "Seller cannot be buyer");
+        require(_amount > 0,               "Amount must be > 0");
+
+        require(
+            usdtToken.transferFrom(msg.sender, address(this), _amount),
+            "USDT transfer failed"
+        );
+
+        escrows[_escrowId] = Escrow({
+            buyer:           _buyer,
+            seller:          msg.sender,
+            amount:          _amount,
+            createdAt:       block.timestamp,
+            released:        false,
+            refunded:        false,
+            sellerConfirmed: false
+        });
+
+        activeEscrowIds.push(_escrowId);
+        emit EscrowCreated(_escrowId, _buyer, msg.sender, _amount);
+    }
+
     // ── Seller: signal that they received the fiat payment (optional step) ────
     function confirmDelivery(bytes32 _escrowId) external {
         Escrow storage e = escrows[_escrowId];

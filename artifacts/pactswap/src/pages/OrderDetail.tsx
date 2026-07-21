@@ -8,7 +8,7 @@ import {
   useGetMe,
   getGetOrderQueryKey,
 } from "@workspace/api-client-react";
-import { releaseEscrow } from "@/lib/contract";
+import { releaseEscrow, lockEscrowBySeller } from "@/lib/contract";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -107,17 +107,21 @@ const statusMap: Record<number, { label: string; color: string }> = {
 
 // ── Simple chat messages (instruction feed) ───────────────────────────────────
 function ChatFeed({ order, isBuyer }: { order: any; isBuyer: boolean }) {
+  const escrowLocked = !!order.contractTx;
   const messages = [
-    { from: "system", text: "Trade started. USDT is locked in escrow." },
-    ...(isBuyer
-      ? [
-          { from: "system", text: `Transfer ₦${(order.priceNaira * order.amountUsdt).toLocaleString()} to the seller's bank account shown on the left.` },
-          { from: "system", text: 'After payment, tap "I Have Paid". The seller will verify and release your USDT.' },
-        ]
-      : [
-          { from: "system", text: "Wait for the buyer to complete their bank transfer." },
-          { from: "system", text: 'Check your bank account. Once you confirm receipt, tap "Release USDT".' },
-        ]
+    { from: "system", text: "Trade created. Waiting for seller to lock USDT in escrow." },
+    ...(escrowLocked ? [{ from: "system", text: "✅ Seller has locked USDT in escrow." }] : []),
+    ...(escrowLocked
+      ? isBuyer
+        ? [
+            { from: "system", text: `Transfer ₦${(order.priceNaira * order.amountUsdt).toLocaleString()} to the seller's bank account shown on the left.` },
+            { from: "system", text: 'After payment, tap "I Have Paid". The seller will verify and release your USDT.' },
+          ]
+        : [
+            { from: "system", text: "Wait for the buyer to complete their bank transfer." },
+            { from: "system", text: 'Once you confirm fiat receipt, tap "Confirm Payment & Release USDT".' },
+          ]
+      : []
     ),
     ...(order.status >= 1 ? [{ from: "buyer", text: "Payment sent ✓" }] : []),
     ...(order.status >= 2 ? [{ from: "system", text: "USDT released. Trade complete! 🎉" }] : []),
@@ -159,6 +163,10 @@ export default function OrderDetail() {
   const [disputeReason, setDisputeReason] = useState("");
   const [releaseLoading, setReleaseLoading] = useState(false);
   const [releaseTxHash, setReleaseTxHash] = useState<string | null>(null);
+  const [lockLoading, setLockLoading] = useState(false);
+  const [lockStep, setLockStep] = useState<"approving" | "locking" | null>(null);
+  const [lockTxHash, setLockTxHash] = useState<string | null>(null);
+  const [lockError, setLockError] = useState<string | null>(null);
 
   const countdown = useCountdown(order?.createdAt?.toString());
 
@@ -182,6 +190,49 @@ export default function OrderDetail() {
       onSuccess: () => { toast.success("Marked as paid. Waiting for seller."); refetch(); },
       onError: (e: any) => toast.error((e as any)?.data?.error ?? (e as any)?.message ?? "Action failed"),
     });
+  };
+
+  // Seller: lock USDT on-chain for a buyer-initiated order
+  const handleLockEscrow = async () => {
+    if (!order.escrowId) { toast.error("Missing escrow ID."); return; }
+    if (!order.buyer?.walletAddress) { toast.error("Buyer wallet address not found."); return; }
+    setLockLoading(true);
+    setLockError(null);
+    setLockTxHash(null);
+    try {
+      const txHash = await lockEscrowBySeller({
+        escrowId: order.escrowId,
+        buyerAddress: order.buyer.walletAddress,
+        amountUsdt: String(order.amountUsdt),
+        onStep: (step) => setLockStep(step),
+      });
+      setLockTxHash(txHash);
+      toast.info("Escrow locked on-chain — recording…");
+
+      // Tell the server to record the lock tx
+      const token = localStorage.getItem("pactswap_token");
+      const res = await fetch(`/api/orders/${order.id}/lock`, {
+        method: "PATCH",
+        headers: {
+          "Content-Type": "application/json",
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+        body: JSON.stringify({ txHash }),
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data?.error ?? "Server failed to record lock");
+      }
+      toast.success("USDT locked in escrow! Waiting for buyer to send payment.");
+      refetch();
+    } catch (err: any) {
+      const msg = err?.reason ?? err?.message ?? "Lock failed — please try again.";
+      setLockError(msg);
+      toast.error(msg);
+    } finally {
+      setLockLoading(false);
+      setLockStep(null);
+    }
   };
 
   // Seller: (1) sign releaseEscrow on-chain → USDT moves to buyer → (2) tell server
@@ -404,7 +455,82 @@ export default function OrderDetail() {
 
             {/* Action buttons */}
             <div className="bg-card border border-border rounded-xl p-4 space-y-3">
-              {isBuyer && order.status === 0 && (
+
+              {/* ── SELLER: status=0, escrow NOT yet locked ── */}
+              {isSeller && order.status === 0 && !order.contractTx && (
+                <>
+                  <div className="p-3 bg-blue-500/10 border border-blue-500/30 rounded-lg text-xs text-blue-400 text-center">
+                    <AlertCircle className="w-3.5 h-3.5 inline mr-1 mb-0.5" />
+                    Lock your USDT in escrow so the buyer can safely send payment.
+                  </div>
+
+                  {/* Step indicators while locking */}
+                  {lockLoading && (
+                    <div className="space-y-2 px-1">
+                      <div className={`flex items-center gap-2 text-xs ${lockStep === "approving" ? "text-primary" : lockStep === "locking" ? "text-green-400" : "text-muted-foreground"}`}>
+                        {lockStep === "approving" ? <Loader2 className="w-3 h-3 animate-spin" /> : <CheckCircle2 className="w-3 h-3" />}
+                        Step 1 — Approve USDT spend in wallet
+                      </div>
+                      <div className={`flex items-center gap-2 text-xs ${lockStep === "locking" ? "text-primary" : "text-muted-foreground"}`}>
+                        {lockStep === "locking" ? <Loader2 className="w-3 h-3 animate-spin" /> : <div className="w-3 h-3 rounded-full border border-muted-foreground/40" />}
+                        Step 2 — Lock USDT in escrow contract
+                      </div>
+                    </div>
+                  )}
+
+                  <Button
+                    className="w-full h-12 bg-primary hover:bg-primary/90 text-black font-bold text-base"
+                    onClick={handleLockEscrow}
+                    disabled={lockLoading}
+                  >
+                    {lockLoading && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
+                    {lockLoading
+                      ? lockStep === "approving" ? "Approving USDT…" : "Locking in Escrow…"
+                      : `Lock ${order.amountUsdt} USDT in Escrow`}
+                  </Button>
+
+                  {/* Show TX hash as soon as it lands */}
+                  {lockTxHash && (
+                    <a
+                      href={`https://bscscan.com/tx/${lockTxHash}`}
+                      target="_blank" rel="noopener noreferrer"
+                      className="block text-xs text-primary underline underline-offset-2 font-mono break-all text-center"
+                    >
+                      Locking TX: {lockTxHash.slice(0, 20)}…{lockTxHash.slice(-8)} ↗
+                    </a>
+                  )}
+
+                  {/* Show full error — never hide it */}
+                  {lockError && (
+                    <div className="p-3 bg-red-500/10 border border-red-500/30 rounded-lg text-xs text-red-400 break-words">
+                      <AlertCircle className="w-3.5 h-3.5 inline mr-1 mb-0.5" />
+                      {lockError}
+                    </div>
+                  )}
+                </>
+              )}
+
+              {/* ── SELLER: status=0, escrow locked, waiting for buyer ── */}
+              {isSeller && order.status === 0 && order.contractTx && (
+                <div className="p-3 bg-green-500/10 border border-green-500/30 rounded-lg text-xs text-green-400 text-center space-y-1">
+                  <div><CheckCircle2 className="w-4 h-4 inline mr-1 mb-0.5" />USDT locked in escrow. Waiting for buyer to send payment…</div>
+                  <a href={`https://bscscan.com/tx/${order.contractTx}`} target="_blank" rel="noopener noreferrer"
+                    className="block text-primary underline underline-offset-2 font-mono break-all">
+                    View lock tx on BSCScan ↗
+                  </a>
+                </div>
+              )}
+
+              {/* ── BUYER: status=0, escrow NOT locked yet ── */}
+              {isBuyer && order.status === 0 && !order.contractTx && (
+                <div className="p-3 bg-blue-500/10 border border-blue-500/30 rounded-lg text-xs text-blue-400 text-center">
+                  <Clock className="w-4 h-4 inline mr-1 mb-0.5" />
+                  Waiting for the seller to lock USDT in escrow…
+                </div>
+              )}
+
+              {/* ── BUYER: status=0, escrow locked → can now pay ── */}
+              {isBuyer && order.status === 0 && order.contractTx && (
                 <Button
                   className="w-full h-12 bg-primary hover:bg-primary/90 text-black font-bold text-base"
                   onClick={handleMarkPaid}
@@ -415,6 +541,7 @@ export default function OrderDetail() {
                 </Button>
               )}
 
+              {/* ── BUYER: status=1, waiting for seller to release ── */}
               {isBuyer && order.status === 1 && (
                 <div className="p-3 bg-yellow-500/10 border border-yellow-500/30 rounded-lg text-xs text-yellow-400 text-center">
                   <Clock className="w-4 h-4 inline mr-1 mb-0.5" />
@@ -422,6 +549,7 @@ export default function OrderDetail() {
                 </div>
               )}
 
+              {/* ── SELLER: status=1, release button ── */}
               {isSeller && order.status === 1 && (
                 <>
                   <div className="p-3 bg-amber-500/10 border border-amber-500/30 rounded-lg text-xs text-amber-400 text-center">
@@ -437,13 +565,6 @@ export default function OrderDetail() {
                     {releaseLoading ? "Waiting for wallet…" : "Confirm Payment & Release USDT"}
                   </Button>
                 </>
-              )}
-
-              {isSeller && order.status === 0 && (
-                <div className="p-3 bg-muted/20 border border-border/50 rounded-lg text-xs text-muted-foreground text-center">
-                  <Clock className="w-4 h-4 inline mr-1 mb-0.5" />
-                  Waiting for buyer to send payment…
-                </div>
               )}
 
               {(order.status === 0 || order.status === 1) && (

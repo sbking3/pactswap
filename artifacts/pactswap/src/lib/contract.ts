@@ -2,7 +2,7 @@ import { ethers } from "ethers";
 import contractABI from "./contractABI.json";
 import { connectWallet } from "./wallet-provider";
 
-export const CONTRACT_ADDRESS = "0x8aAcD32511ef4902939541b5E9EFb6Ff6cae7AFF";
+export const CONTRACT_ADDRESS = "0x3FE1bAbd4aC5bB5107767d913e6d4A2b63D4385d";
 export const USDT_ADDRESS = "0x55d398326f99059fF775485246999027B3197955";
 // Re-export so existing callers can import from either location
 export { connectWallet, BSC_CHAIN_ID } from "./wallet-provider";
@@ -113,6 +113,36 @@ export async function createEscrow({ escrowId, sellerAddress, amountUsdt, onStep
   const contract = new ethers.Contract(CONTRACT_ADDRESS, contractABI, signer);
   const tx = await contract.createEscrow(escrowId, sellerAddress, amountWei);
   onStep?.("verifying");
+  await tx.wait();
+  return tx.hash as string;
+}
+
+/**
+ * Seller locks USDT for a buyer-initiated order.
+ * Step 1: approves USDT spend.
+ * Step 2: calls lockEscrowBySeller(escrowId, buyerAddress, amount) on-chain.
+ * Returns the transaction hash.
+ */
+export async function lockEscrowBySeller({
+  escrowId,
+  buyerAddress,
+  amountUsdt,
+  onStep,
+}: {
+  escrowId: string;
+  buyerAddress: string;
+  amountUsdt: string;
+  onStep?: (step: "approving" | "locking") => void;
+}): Promise<string> {
+  const signer = await connectWallet();
+  const amountWei = ethers.parseUnits(amountUsdt, 6);
+
+  onStep?.("approving");
+  await approveUsdt(signer, amountWei);
+
+  onStep?.("locking");
+  const contract = new ethers.Contract(CONTRACT_ADDRESS, contractABI, signer);
+  const tx = await contract.lockEscrowBySeller(escrowId, buyerAddress, amountWei);
   await tx.wait();
   return tx.hash as string;
 }

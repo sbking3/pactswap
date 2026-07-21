@@ -326,6 +326,59 @@ router.patch("/orders/:id/paid", requireAuth, async (req, res) => {
   res.json(await enrichOrder(updated[0]));
 });
 
+// PATCH /api/orders/:id/lock
+// Seller calls this AFTER lockEscrowBySeller() is confirmed on-chain.
+// Verifies the escrow exists on-chain (buyer address set), records contractTx, keeps status=0.
+router.patch("/orders/:id/lock", requireAuth, async (req, res) => {
+  const { txHash } = req.body;
+  if (!txHash || typeof txHash !== "string") {
+    res.status(400).json({ error: "txHash is required" });
+    return;
+  }
+
+  const orders = await db.select().from(ordersTable).where(eq(ordersTable.id, req.params.id as string));
+  if (orders.length === 0) { res.status(404).json({ error: "Order not found" }); return; }
+  const order = orders[0];
+
+  if (order.sellerId !== req.user!.userId) {
+    res.status(403).json({ error: "Only the seller can lock escrow" });
+    return;
+  }
+  if (order.status !== 0) {
+    res.status(400).json({ error: "Order is not in created status" });
+    return;
+  }
+  if (order.contractTx) {
+    res.status(400).json({ error: "Escrow already locked" });
+    return;
+  }
+
+  // Verify on-chain: escrow must exist (buyer address set) and not already released
+  let escrowState: Awaited<ReturnType<typeof readEscrow>>;
+  try {
+    escrowState = await readEscrow(order.escrowId);
+  } catch (err: any) {
+    logger.error({ err: err?.message, escrowId: order.escrowId }, "✗ readEscrow RPC error during lock");
+    res.status(502).json({ error: "Could not read escrow from BSC. RPC may be busy — try again." });
+    return;
+  }
+
+  if (escrowState.buyer === "0x0000000000000000000000000000000000000000") {
+    res.status(400).json({ error: "Escrow not found on-chain yet. Please wait for BSC confirmation." });
+    return;
+  }
+
+  logger.info({ txHash, orderId: order.id, escrowId: order.escrowId }, "✓ lockEscrowBySeller confirmed on-chain");
+
+  const updated = await db
+    .update(ordersTable)
+    .set({ contractTx: txHash, updatedAt: new Date() })
+    .where(eq(ordersTable.id, order.id))
+    .returning();
+
+  res.json(await enrichOrder(updated[0]));
+});
+
 // PATCH /api/orders/:id/confirm
 // Seller calls this AFTER their wallet has already called releaseEscrow() on-chain.
 // Body: { txHash: string }  — the on-chain release transaction hash

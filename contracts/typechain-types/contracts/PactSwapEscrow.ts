@@ -35,6 +35,7 @@ export interface PactSwapEscrowInterface extends Interface {
       | "escrows"
       | "feeRecipient"
       | "getActiveEscrowCount"
+      | "lockEscrowBySeller"
       | "processExpiredEscrows"
       | "refundEscrow"
       | "releaseEscrow"
@@ -77,6 +78,10 @@ export interface PactSwapEscrowInterface extends Interface {
     values?: undefined
   ): string;
   encodeFunctionData(
+    functionFragment: "lockEscrowBySeller",
+    values: [BytesLike, AddressLike, BigNumberish]
+  ): string;
+  encodeFunctionData(
     functionFragment: "processExpiredEscrows",
     values?: undefined
   ): string;
@@ -115,6 +120,10 @@ export interface PactSwapEscrowInterface extends Interface {
   ): Result;
   decodeFunctionResult(
     functionFragment: "getActiveEscrowCount",
+    data: BytesLike
+  ): Result;
+  decodeFunctionResult(
+    functionFragment: "lockEscrowBySeller",
     data: BytesLike
   ): Result;
   decodeFunctionResult(
@@ -295,6 +304,12 @@ export interface PactSwapEscrow extends BaseContract {
 
   getActiveEscrowCount: TypedContractMethod<[], [bigint], "view">;
 
+  lockEscrowBySeller: TypedContractMethod<
+    [_escrowId: BytesLike, _buyer: AddressLike, _amount: BigNumberish],
+    [void],
+    "nonpayable"
+  >;
+
   processExpiredEscrows: TypedContractMethod<[], [void], "nonpayable">;
 
   refundEscrow: TypedContractMethod<
@@ -360,6 +375,13 @@ export interface PactSwapEscrow extends BaseContract {
   getFunction(
     nameOrSignature: "getActiveEscrowCount"
   ): TypedContractMethod<[], [bigint], "view">;
+  getFunction(
+    nameOrSignature: "lockEscrowBySeller"
+  ): TypedContractMethod<
+    [_escrowId: BytesLike, _buyer: AddressLike, _amount: BigNumberish],
+    [void],
+    "nonpayable"
+  >;
   getFunction(
     nameOrSignature: "processExpiredEscrows"
   ): TypedContractMethod<[], [void], "nonpayable">;
