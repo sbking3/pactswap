@@ -14,10 +14,7 @@
  */
 
 import { useState, useEffect } from "react";
-import {
-  connectWallet as providerConnect,
-  isMobileWithoutWallet,
-} from "@/lib/wallet-provider";
+import { connectWallet as providerConnect } from "@/lib/wallet-provider";
 
 declare global {
   interface Window {
@@ -82,12 +79,6 @@ export function useWallet() {
   const connectWallet = async () => {
     if (isConnecting) return; // local guard for button state
 
-    // Mobile with no injected wallet → show deep-link guide, don't hang
-    if (isMobileWithoutWallet()) {
-      setShowWalletGuide(true);
-      return;
-    }
-
     setIsConnecting(true);
     try {
       const signer = await providerConnect();
@@ -95,11 +86,8 @@ export function useWallet() {
       setAddress(addr.toLowerCase());
       setIsConnected(true);
     } catch (err: any) {
-      // Typed error from wallet-provider when mobile + no WC project ID
-      if (err?.code === "MOBILE_NO_WALLET") {
-        setShowWalletGuide(true);
-        return;
-      }
+      // Page is navigating to the wallet app — not a real error, stay quiet
+      if (err?.message === "OPENING_WALLET_APP") return;
       console.error("[useWallet] connectWallet error:", err);
     } finally {
       setIsConnecting(false);

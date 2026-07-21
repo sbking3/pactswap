@@ -139,11 +139,20 @@ async function ensureBsc(eip1193: any): Promise<void> {
 
 /**
  * Connect wallet, switch to BSC if needed, and return an ethers signer.
- * Works identically for MetaMask (desktop/mobile in-app) and WalletConnect.
  *
- * Protected by a singleton promise: if called multiple times concurrently
- * (e.g. double-click), all callers share one connection attempt — no RPC spam,
- * no duplicate wallet popups.
+ * Desktop / in-app browser (window.ethereum present):
+ *   Uses the injected provider directly — MetaMask popup, BSC switch, signer.
+ *
+ * Mobile without injected wallet:
+ *   Redirects immediately to the wallet's deep link so the page re-opens
+ *   inside the wallet's built-in browser (where window.ethereum is injected).
+ *   Android tries MetaMask first, falls back to Trust Wallet after 1 s.
+ *   iPhone goes straight to MetaMask.
+ *   Throws Error("OPENING_WALLET_APP") so callers know a redirect is in progress
+ *   and can suppress the error (the page is navigating away anyway).
+ *
+ * Protected by a singleton promise: concurrent calls share one attempt —
+ * no duplicate wallet popups, no RPC spam.
  */
 export async function connectWallet(): Promise<ethers.JsonRpcSigner> {
   // If a connection is already in flight, return the same promise
@@ -151,17 +160,36 @@ export async function connectWallet(): Promise<ethers.JsonRpcSigner> {
 
   _connectingPromise = (async () => {
     try {
-      const eip1193 = await getEip1193Provider();
+      // ── Desktop / in-app wallet browser ─────────────────────────────────
+      if (window.ethereum) {
+        const provider = new ethers.BrowserProvider(window.ethereum);
+        await provider.send("eth_requestAccounts", []);
+        await ensureBsc(window.ethereum);
+        _activeEip1193 = window.ethereum;
+        return provider.getSigner();
+      }
 
-      // Request accounts — prompts MetaMask popup or WC modal
-      await new ethers.BrowserProvider(eip1193).send("eth_requestAccounts", []);
+      // ── Mobile without injected wallet — redirect into wallet app ────────
+      const dappUrl  = window.location.host + window.location.pathname + window.location.search;
+      const fullUrl  = encodeURIComponent(window.location.href);
+      const isAndroid = /Android/i.test(navigator.userAgent);
 
-      await ensureBsc(eip1193);
+      if (isAndroid) {
+        // Try MetaMask; if it's not installed the OS keeps the browser open,
+        // so fall back to Trust Wallet after 1 s.
+        window.location.href = `https://metamask.app.link/dapp/${dappUrl}`;
+        setTimeout(() => {
+          window.location.href =
+            `https://link.trustwallet.com/openurl?coin_id=60&url=${fullUrl}`;
+        }, 1000);
+      } else {
+        // iPhone / iPad
+        window.location.href = `https://metamask.app.link/dapp/${dappUrl}`;
+      }
 
-      // Re-create provider after potential chain switch so chainId is fresh
-      return new ethers.BrowserProvider(eip1193).getSigner();
+      // Page is navigating away — throw so callers can react appropriately
+      throw new Error("OPENING_WALLET_APP");
     } finally {
-      // Always clear the guard so future calls can start fresh
       _connectingPromise = null;
     }
   })();
