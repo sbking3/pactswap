@@ -18,7 +18,7 @@ router.get("/disputes", requireAdmin, async (req, res) => {
 
 // GET /api/disputes/:id
 router.get("/disputes/:id", requireAuth, async (req, res) => {
-  const disputes = await db.select().from(disputesTable).where(eq(disputesTable.id, req.params.id));
+  const disputes = await db.select().from(disputesTable).where(eq(disputesTable.id, req.params.id as string));
   if (disputes.length === 0) {
     res.status(404).json({ error: "Dispute not found" });
     return;
@@ -34,7 +34,7 @@ router.patch("/disputes/:id", requireAdmin, async (req, res) => {
     return;
   }
 
-  const disputes = await db.select().from(disputesTable).where(eq(disputesTable.id, req.params.id));
+  const disputes = await db.select().from(disputesTable).where(eq(disputesTable.id, req.params.id as string));
   if (disputes.length === 0) {
     res.status(404).json({ error: "Dispute not found" });
     return;
@@ -43,7 +43,7 @@ router.patch("/disputes/:id", requireAdmin, async (req, res) => {
   const updated = await db
     .update(disputesTable)
     .set({ status, resolution: resolution ?? null, updatedAt: new Date() })
-    .where(eq(disputesTable.id, req.params.id))
+    .where(eq(disputesTable.id, req.params.id as string))
     .returning();
 
   res.json(updated[0]);

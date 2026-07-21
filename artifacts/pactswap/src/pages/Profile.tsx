@@ -49,7 +49,7 @@ export default function Profile() {
         toast.success("Profile updated successfully");
         refetchUser();
       },
-      onError: (error) => toast.error(error.error || "Failed to update profile")
+      onError: (error) => toast.error((error as any).error || "Failed to update profile")
     });
   };
 
@@ -64,7 +64,7 @@ export default function Profile() {
         toast.success("Bank details securely saved");
         refetchUser();
       },
-      onError: (error) => toast.error(error.error || "Failed to update bank details")
+      onError: (error) => toast.error((error as any).error || "Failed to update bank details")
     });
   };
 

@@ -61,7 +61,7 @@ router.patch("/admin/kyc/:id", requireAdmin, async (req, res) => {
     return;
   }
 
-  const kycs = await db.select().from(kycTable).where(eq(kycTable.id, req.params.id));
+  const kycs = await db.select().from(kycTable).where(eq(kycTable.id, req.params.id as string));
   if (kycs.length === 0) {
     res.status(404).json({ error: "KYC submission not found" });
     return;
@@ -113,7 +113,7 @@ router.patch("/admin/users/:id/ban", requireAdmin, async (req, res) => {
     res.status(400).json({ error: "isBanned (boolean) is required" });
     return;
   }
-  const updated = await db.update(usersTable).set({ isBanned }).where(eq(usersTable.id, req.params.id)).returning();
+  const updated = await db.update(usersTable).set({ isBanned }).where(eq(usersTable.id, req.params.id as string)).returning();
   if (updated.length === 0) {
     res.status(404).json({ error: "User not found" });
     return;

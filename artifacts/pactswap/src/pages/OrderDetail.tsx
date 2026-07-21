@@ -322,9 +322,9 @@ export default function OrderDetail() {
                 <span className="font-semibold text-white text-sm block mb-4">Seller Bank Details</span>
                 <div className="space-y-3">
                   {[
-                    { label: "Bank", value: order.seller?.bankName || "—" },
-                    { label: "Account No.", value: order.seller?.accountNumber || "—", copy: true },
-                    { label: "Account Name", value: order.seller?.accountName || "—" },
+                    { label: "Bank", value: (order.seller as any)?.bankName || "—" },
+                    { label: "Account No.", value: (order.seller as any)?.accountNumber || "—", copy: true },
+                    { label: "Account Name", value: (order.seller as any)?.accountName || "—" },
                   ].map(({ label, value, copy }) => (
                     <div key={label} className="flex justify-between items-center py-2 border-b border-border/40 last:border-0">
                       <span className="text-xs text-muted-foreground">{label}</span>

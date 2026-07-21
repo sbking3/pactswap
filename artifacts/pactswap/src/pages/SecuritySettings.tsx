@@ -19,7 +19,7 @@ export default function SecuritySettings() {
   const handleStartSetup = () => {
     setupMutation.mutate(undefined, {
       onSuccess: (data) => setSetupData(data),
-      onError: (error) => toast.error(error.error || "Failed to generate 2FA secret")
+      onError: (error) => toast.error((error as any).error || "Failed to generate 2FA secret")
     });
   };
 
@@ -34,7 +34,7 @@ export default function SecuritySettings() {
         setToken("");
         refetch();
       },
-      onError: (error) => toast.error(error.error || "Invalid verification code")
+      onError: (error) => toast.error((error as any).error || "Invalid verification code")
     });
   };
 
@@ -48,7 +48,7 @@ export default function SecuritySettings() {
         setToken("");
         refetch();
       },
-      onError: (error) => toast.error(error.error || "Invalid verification code")
+      onError: (error) => toast.error((error as any).error || "Invalid verification code")
     });
   };
 

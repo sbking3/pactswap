@@ -288,7 +288,7 @@ router.post("/orders", requireAuth, async (req, res) => {
 
 // GET /api/orders/:id
 router.get("/orders/:id", requireAuth, async (req, res) => {
-  const orders = await db.select().from(ordersTable).where(eq(ordersTable.id, req.params.id));
+  const orders = await db.select().from(ordersTable).where(eq(ordersTable.id, req.params.id as string));
   if (orders.length === 0) {
     res.status(404).json({ error: "Order not found" });
     return;
@@ -308,7 +308,7 @@ router.get("/orders/:id", requireAuth, async (req, res) => {
 
 // PATCH /api/orders/:id/paid
 router.patch("/orders/:id/paid", requireAuth, async (req, res) => {
-  const orders = await db.select().from(ordersTable).where(eq(ordersTable.id, req.params.id));
+  const orders = await db.select().from(ordersTable).where(eq(ordersTable.id, req.params.id as string));
   if (orders.length === 0) {
     res.status(404).json({ error: "Order not found" });
     return;
@@ -336,7 +336,7 @@ router.patch("/orders/:id/confirm", requireAuth, async (req, res) => {
     return;
   }
 
-  const orders = await db.select().from(ordersTable).where(eq(ordersTable.id, req.params.id));
+  const orders = await db.select().from(ordersTable).where(eq(ordersTable.id, req.params.id as string));
   if (orders.length === 0) {
     res.status(404).json({ error: "Order not found" });
     return;
@@ -396,7 +396,7 @@ router.post("/orders/:id/dispute", requireAuth, async (req, res) => {
     res.status(400).json({ error: "reason is required" });
     return;
   }
-  const orders = await db.select().from(ordersTable).where(eq(ordersTable.id, req.params.id));
+  const orders = await db.select().from(ordersTable).where(eq(ordersTable.id, req.params.id as string));
   if (orders.length === 0) {
     res.status(404).json({ error: "Order not found" });
     return;

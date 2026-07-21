@@ -86,7 +86,7 @@ router.get("/offers/my", requireAuth, async (req, res) => {
 
 // GET /api/offers/:id
 router.get("/offers/:id", async (req, res) => {
-  const offers = await db.select().from(offersTable).where(eq(offersTable.id, req.params.id));
+  const offers = await db.select().from(offersTable).where(eq(offersTable.id, req.params.id as string));
   if (offers.length === 0) {
     res.status(404).json({ error: "Offer not found" });
     return;
@@ -98,7 +98,7 @@ router.get("/offers/:id", async (req, res) => {
 
 // PATCH /api/offers/:id
 router.patch("/offers/:id", requireAuth, async (req, res) => {
-  const offers = await db.select().from(offersTable).where(eq(offersTable.id, req.params.id));
+  const offers = await db.select().from(offersTable).where(eq(offersTable.id, req.params.id as string));
   if (offers.length === 0) {
     res.status(404).json({ error: "Offer not found" });
     return;
@@ -117,14 +117,14 @@ router.patch("/offers/:id", requireAuth, async (req, res) => {
   if (isActive !== undefined) updates.isActive = isActive;
   updates.updatedAt = new Date();
 
-  const updated = await db.update(offersTable).set(updates).where(eq(offersTable.id, req.params.id)).returning();
+  const updated = await db.update(offersTable).set(updates).where(eq(offersTable.id, req.params.id as string)).returning();
   const sellers = await db.select().from(usersTable).where(eq(usersTable.id, offers[0].sellerId));
   res.json({ ...updated[0], seller: sellers[0] ? toPublicProfile(sellers[0]) : null });
 });
 
 // DELETE /api/offers/:id
 router.delete("/offers/:id", requireAuth, async (req, res) => {
-  const offers = await db.select().from(offersTable).where(eq(offersTable.id, req.params.id));
+  const offers = await db.select().from(offersTable).where(eq(offersTable.id, req.params.id as string));
   if (offers.length === 0) {
     res.status(404).json({ error: "Offer not found" });
     return;
@@ -133,7 +133,7 @@ router.delete("/offers/:id", requireAuth, async (req, res) => {
     res.status(403).json({ error: "Not authorized" });
     return;
   }
-  await db.delete(offersTable).where(eq(offersTable.id, req.params.id));
+  await db.delete(offersTable).where(eq(offersTable.id, req.params.id as string));
   res.json({ message: "Offer deleted" });
 });
 

@@ -59,7 +59,7 @@ export default function CreateOffer() {
         setLocation("/dashboard"); // or /offers/my if we build it
       },
       onError: (error) => {
-        toast.error(error.error || "Failed to create offer");
+        toast.error((error as any).error || "Failed to create offer");
       }
     });
   };

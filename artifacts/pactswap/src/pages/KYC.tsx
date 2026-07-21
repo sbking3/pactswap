@@ -48,7 +48,7 @@ export default function KYC() {
         refetch();
       },
       onError: (error) => {
-        toast.error(error.error || "Failed to submit KYC.");
+        toast.error((error as any).error || "Failed to submit KYC.");
       }
     });
   };
