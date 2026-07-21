@@ -1,0 +1,31 @@
+PACTSWAP WALLET PATCH
+
+ROLE: You are a senior Web3 engineer. Only edit wallet connection files. Do not refactor unrelated code.
+
+CONTEXT:
+Current stack: Next.js + React + ethers v6 + BSC ChainId 56
+Current issue: Wallet connects easily on Desktop MetaMask Extension. 
+It hangs, lags, and spams RPC on Android Chrome and iPhone Safari because window.ethereum is not available.
+Goal: Make mobile work without breaking desktop.
+
+TASK:
+Adjust the existing wallet connection implementation only—do not rebuild or replace the current system.
+
+Please make these adjustments:
+
+- Detect when `window.ethereum` is unavailable on mobile instead of waiting indefinitely.
+- Prevent infinite retries, RPC spam, and loading states that never end. Add an `isConnecting` guard.
+- If the user is on Android Chrome or iPhone Safari without an injected wallet, display wallet options instead of failing.
+- Add support for MetaMask deep links: `https://metamask.app.link/dapp/{DAPP_URL}`
+- Add support for Trust Wallet deep links: `https://link.trustwallet.com/openurl?coin_id=60&url={DAPP_URL}`
+- Integrate WalletConnect v2 as a fallback for mobile users and wallets that don't inject `window.ethereum`. Use projectId from env.
+- Detect if the app is already running inside the MetaMask or Trust Wallet in-app browser and use the existing injected connection flow.
+- Keep all existing authentication, UI, routing, and wallet logic intact. Only modify the connection layer.
+- Preserve all current features and only modify the wallet connection logic where necessary.
+- Use ethers v6 best practices and ensure Binance Smart Chain (Chain ID 56) remains the default network. Auto switch/add chain if needed.
+- Make only the minimal code changes required and update only the affected files: likely `/lib/wallet.js` and `/components/ConnectButton.jsx`
+
+CONSTRAINTS:
+Do not rewrite unrelated code or change the existing design.
+Do not change function names that other files import unless you export the new ones too.
+Focus only on improving mobile wallet connectivity while preserving the current architecture.

@@ -1,16 +1,23 @@
 /**
  * useWallet — reactive wallet state hook.
  *
- * Reads the already-connected accounts on mount and subscribes to
- * accountsChanged events so the rest of the UI stays in sync with MetaMask
- * without having to call connectWallet() just to read the address.
+ * Reads already-connected accounts on mount and subscribes to
+ * accountsChanged events so the UI stays in sync without calling
+ * connectWallet() just to read the address.
  *
- * connectWallet() here only calls eth_requestAccounts (the MetaMask popup).
- * It does NOT switch chains — that is handled separately inside contract.ts
- * when the user actually signs a transaction.
+ * connectWallet() routes through wallet-provider.ts so it gets:
+ *   - BSC chain switch / add
+ *   - WalletConnect fallback
+ *   - isConnecting guard (no double popups, no RPC spam)
+ *   - mobile-without-wallet detection → sets showWalletGuide=true
+ *     so any consumer can open the deep-link modal
  */
 
 import { useState, useEffect } from "react";
+import {
+  connectWallet as providerConnect,
+  isMobileWithoutWallet,
+} from "@/lib/wallet-provider";
 
 declare global {
   interface Window {
@@ -19,8 +26,10 @@ declare global {
 }
 
 export function useWallet() {
-  const [address, setAddress]       = useState<string | null>(null);
-  const [isConnected, setIsConnected] = useState(false);
+  const [address, setAddress]             = useState<string | null>(null);
+  const [isConnected, setIsConnected]     = useState(false);
+  const [isConnecting, setIsConnecting]   = useState(false);
+  const [showWalletGuide, setShowWalletGuide] = useState(false);
 
   /** Read already-authorised accounts silently (no popup). */
   const refreshAccounts = async () => {
@@ -62,22 +71,47 @@ export function useWallet() {
     };
   }, []);
 
-  /** Prompt MetaMask to request accounts (shows the connection popup). */
+  /**
+   * Prompt the user to connect their wallet.
+   *
+   * - Desktop / in-app browser: opens MetaMask popup, switches to BSC.
+   * - Mobile without injected wallet: sets showWalletGuide=true so the
+   *   consumer can render <WalletGuideModal> with deep links.
+   * - Protected against double-clicks via the guard in wallet-provider.ts.
+   */
   const connectWallet = async () => {
+    if (isConnecting) return; // local guard for button state
+
+    // Mobile with no injected wallet → show deep-link guide, don't hang
+    if (isMobileWithoutWallet()) {
+      setShowWalletGuide(true);
+      return;
+    }
+
+    setIsConnecting(true);
     try {
-      if (typeof window !== "undefined" && window.ethereum) {
-        const accounts: string[] = await window.ethereum.request({
-          method: "eth_requestAccounts",
-        });
-        if (accounts.length > 0) {
-          setAddress(accounts[0].toLowerCase());
-          setIsConnected(true);
-        }
+      const signer = await providerConnect();
+      const addr = await signer.getAddress();
+      setAddress(addr.toLowerCase());
+      setIsConnected(true);
+    } catch (err: any) {
+      // Typed error from wallet-provider when mobile + no WC project ID
+      if (err?.code === "MOBILE_NO_WALLET") {
+        setShowWalletGuide(true);
+        return;
       }
-    } catch (err) {
       console.error("[useWallet] connectWallet error:", err);
+    } finally {
+      setIsConnecting(false);
     }
   };
 
-  return { address, isConnected, connectWallet };
+  return {
+    address,
+    isConnected,
+    isConnecting,
+    showWalletGuide,
+    setShowWalletGuide,
+    connectWallet,
+  };
 }

@@ -17,6 +17,7 @@ import { toast } from "sonner";
 import { useAuth } from "@/contexts/AuthContext";
 import { approveUsdtForEscrow, openEscrowOnChain, CONTRACT_ADDRESS } from "@/lib/contract";
 import { useWallet } from "@/hooks/useWallet";
+import { WalletGuideModal } from "@/components/WalletGuideModal";
 
 const MAX_TEST_USDT = 1;
 
@@ -95,7 +96,7 @@ export default function Marketplace() {
   const { data, isLoading } = useListOffers();
 
   // Wallet state — used to determine buyer vs seller role in the dialog
-  const { address, isConnected, connectWallet } = useWallet();
+  const { address, isConnected, isConnecting, connectWallet, showWalletGuide, setShowWalletGuide } = useWallet();
 
   // Is the connected wallet the seller of the selected offer?
   const isSeller =
@@ -292,6 +293,8 @@ export default function Marketplace() {
 
   return (
     <div className="min-h-screen bg-[#0A0A0A]">
+      <WalletGuideModal open={showWalletGuide} onClose={() => setShowWalletGuide(false)} />
+
       {/* ── Page header ──────────────────────────────────────────────── */}
       <div className="border-b border-border/40">
         <div className="container mx-auto px-4 py-5 max-w-7xl">
@@ -501,8 +504,9 @@ export default function Marketplace() {
                     Connect your wallet to verify your role
                   </p>
                   <Button size="sm" variant="outline" onClick={connectWallet}
+                    disabled={isConnecting}
                     className="border-amber-500/40 text-amber-400 hover:bg-amber-500/10 ml-3 flex-shrink-0">
-                    Connect
+                    {isConnecting ? <><Loader2 className="w-3 h-3 mr-1 animate-spin" />Connecting…</> : "Connect"}
                   </Button>
                 </div>
               )}
