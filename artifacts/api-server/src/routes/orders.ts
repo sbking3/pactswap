@@ -277,13 +277,24 @@ router.patch("/orders/:id/confirm", requireAuth, async (req, res) => {
     return;
   }
 
-  // Verify release tx on BSC (read-only — server never signs)
-  const { confirmed } = await verifyTxHash(txHash);
-  if (!confirmed) {
-    res.status(400).json({ error: "Release transaction not confirmed on BSC yet. Please wait and try again." });
+  // Verify release by reading escrow state directly (more reliable than txHash check —
+  // BSC RPC can lag 1-3 blocks, and verifyTxHash only proves a tx landed, not that
+  // the escrow.released flag is actually true on-chain).
+  let escrowState: Awaited<ReturnType<typeof readEscrow>>;
+  try {
+    escrowState = await readEscrow(order.escrowId);
+  } catch (err: any) {
+    logger.error({ err: err?.message, escrowId: order.escrowId }, "✗ readEscrow RPC error during confirm");
+    res.status(502).json({ error: "Could not read escrow from BSC. RPC may be busy — please try again." });
     return;
   }
-  logger.info({ txHash, orderId: order.id }, "releaseEscrow tx verified on-chain");
+
+  if (!escrowState.released) {
+    logger.warn({ escrowId: order.escrowId, txHash }, "✗ Escrow released flag is false — tx may not have landed yet");
+    res.status(400).json({ error: "Escrow is not released on-chain yet. Please wait a moment and try again." });
+    return;
+  }
+  logger.info({ txHash, orderId: order.id, escrowId: order.escrowId }, "✓ releaseEscrow confirmed — escrow.released = true");
 
   const updated = await db
     .update(ordersTable)

@@ -8,7 +8,7 @@ import {
   useGetMe,
   getGetOrderQueryKey,
 } from "@workspace/api-client-react";
-import { confirmDelivery } from "@/lib/contract";
+import { releaseEscrow } from "@/lib/contract";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -158,6 +158,7 @@ export default function OrderDetail() {
   const [disputeOpen, setDisputeOpen] = useState(false);
   const [disputeReason, setDisputeReason] = useState("");
   const [releaseLoading, setReleaseLoading] = useState(false);
+  const [releaseTxHash, setReleaseTxHash] = useState<string | null>(null);
 
   const countdown = useCountdown(order?.createdAt?.toString());
 
@@ -183,27 +184,27 @@ export default function OrderDetail() {
     });
   };
 
-  // Seller: two steps — (1) sign confirmDelivery on-chain → (2) tell server the txHash
+  // Seller: (1) sign releaseEscrow on-chain → USDT moves to buyer → (2) tell server
   const handleRelease = async () => {
     if (!order.escrowId) { toast.error("Missing escrow ID."); return; }
     setReleaseLoading(true);
     try {
-      // Step 1: open MetaMask — seller signs the on-chain release
-      toast.info("Opening wallet — sign the release transaction.");
-      const txHash = await confirmDelivery(order.escrowId);
+      // Step 1: seller signs releaseEscrow() — this is the tx that actually moves USDT
+      toast.info("Opening wallet — sign the release transaction to send USDT to buyer.");
+      const txHash = await releaseEscrow(order.escrowId);
+      setReleaseTxHash(txHash);
 
-      // Step 2: record the confirmed tx on the server (read-only verify + DB update)
-      toast.info("Transaction confirmed — updating trade status…");
+      // Step 2: server reads escrow.released on-chain to verify, then sets status = 2
+      toast.info("Blockchain confirmed — recording trade completion…");
       await confirmPayment(order.id, {
         method: "PATCH",
         body: JSON.stringify({ txHash }),
         headers: { "Content-Type": "application/json" },
       } as RequestInit);
 
-      toast.success("USDT released! Trade complete. 🎉");
+      toast.success("USDT released to buyer! Trade complete. 🎉");
       refetch();
     } catch (err: any) {
-      // User rejected MetaMask, or RPC/server error
       const msg =
         err?.data?.error ??
         err?.reason ??
@@ -357,9 +358,23 @@ export default function OrderDetail() {
 
             {/* Completed */}
             {order.status === 2 && (
-              <div className="bg-green-500/10 border border-green-500/30 rounded-xl p-4 flex gap-3 items-center">
-                <CheckCircle2 className="w-5 h-5 text-green-400 flex-shrink-0" />
-                <p className="text-sm text-green-400 font-semibold">Trade complete — USDT released to buyer wallet.</p>
+              <div className="bg-green-500/10 border border-green-500/30 rounded-xl p-4 flex flex-col gap-2">
+                <div className="flex gap-3 items-center">
+                  <CheckCircle2 className="w-5 h-5 text-green-400 flex-shrink-0" />
+                  <p className="text-sm text-green-400 font-semibold">
+                    {isBuyer ? "Trade complete — USDT has been sent to your wallet." : "Trade complete — USDT released to buyer."}
+                  </p>
+                </div>
+                {(releaseTxHash ?? order.contractTx) && (
+                  <a
+                    href={`https://bscscan.com/tx/${releaseTxHash ?? order.contractTx}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-xs text-primary underline underline-offset-2 hover:text-primary/80 ml-8 font-mono break-all"
+                  >
+                    View release tx on BSCScan ↗
+                  </a>
+                )}
               </div>
             )}
           </div>
