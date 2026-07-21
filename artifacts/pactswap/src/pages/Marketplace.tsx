@@ -11,11 +11,12 @@ import {
 } from "@/components/ui/dialog";
 import {
   Loader2, Search, Star, ShieldCheck, ArrowDownUp,
-  CheckCircle2, Wallet, Lock,
+  CheckCircle2, Wallet, Lock, AlertCircle,
 } from "lucide-react";
 import { toast } from "sonner";
 import { useAuth } from "@/contexts/AuthContext";
-import { approveUsdtForEscrow, openEscrowOnChain } from "@/lib/contract";
+import { approveUsdtForEscrow, openEscrowOnChain, CONTRACT_ADDRESS } from "@/lib/contract";
+import { useWallet } from "@/hooks/useWallet";
 
 const MAX_TEST_USDT = 1;
 
@@ -86,11 +87,21 @@ export default function Marketplace() {
   const [buyAmount, setBuyAmount] = useState("");
   const [dialogPhase, setDialogPhase] = useState<DialogPhase>("input");
   const [pendingEscrowId, setPendingEscrowId] = useState<string | null>(null);
+  const [buyerLoading, setBuyerLoading] = useState(false);
 
   const isBusy = dialogPhase !== "input" && dialogPhase !== "approved";
 
   const { user, token } = useAuth();
   const { data, isLoading } = useListOffers();
+
+  // Wallet state — used to determine buyer vs seller role in the dialog
+  const { address, isConnected, connectWallet } = useWallet();
+
+  // Is the connected wallet the seller of the selected offer?
+  const isSeller =
+    !!address &&
+    !!selectedOffer?.seller?.walletAddress &&
+    address.toLowerCase() === selectedOffer.seller.walletAddress.toLowerCase();
 
   // ── Open dialog ──────────────────────────────────────────────────────────────
   const handleBuyClick = (offer: any) => {
@@ -103,7 +114,7 @@ export default function Marketplace() {
   };
 
   const handleDialogClose = () => {
-    if (isBusy) return; // prevent closing while wallet is open
+    if (isBusy || buyerLoading) return; // prevent closing while wallet is open
     setBuyDialogOpen(false);
     setDialogPhase("input");
     setPendingEscrowId(null);
@@ -122,14 +133,60 @@ export default function Marketplace() {
     return true;
   }
 
-  // ── STEP 1: Approve USDT ─────────────────────────────────────────────────────
+  // ── BUYER flow: create order without wallet interaction ───────────────────────
+  const handleBuyerInitiate = async () => {
+    const amountNum = parseFloat(buyAmount);
+    if (!validateAmount(amountNum)) return;
+    if (!user?.email || !selectedOffer) return;
+    if (!selectedOffer.seller?.walletAddress) { toast.error("Seller address not found"); return; }
+
+    setBuyerLoading(true);
+    try {
+      // Generate a client-side escrowId for the DB record.
+      // The seller will lock USDT on-chain using this same ID from the order detail page.
+      const escrowId = ethers.id(crypto.randomUUID());
+
+      const res = await fetch("/api/orders/initiate", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+        body: JSON.stringify({
+          escrowId,
+          offerId: selectedOffer.id,
+          amount: amountNum,
+          sellerAddress: selectedOffer.seller.walletAddress,
+          priceNaira: selectedOffer.priceNaira,
+          token: "USDT",
+          email: user.email,
+        }),
+      });
+
+      const data = await res.json();
+      if (!res.ok) {
+        toast.error(data?.error ?? "Failed to create trade");
+        return;
+      }
+
+      toast.success("Trade created! Send payment to the seller's bank.");
+      setBuyDialogOpen(false);
+      setDialogPhase("input");
+      setLocation(`/orders/${data.orderId}`);
+    } catch {
+      toast.error("Network error — please try again");
+    } finally {
+      setBuyerLoading(false);
+    }
+  };
+
+  // ── SELLER flow: STEP 1 — Approve USDT ───────────────────────────────────────
   const handleApproveUsdt = async () => {
     const amountNum = parseFloat(buyAmount);
     if (!validateAmount(amountNum)) return;
     if (!user?.email) { toast.error("Please log in first"); return; }
     if (!selectedOffer.seller?.walletAddress) { toast.error("Seller address not found"); return; }
 
-    // Generate the escrowId now — same one will be used in Step 2 + backend
     const newEscrowId = ethers.id(crypto.randomUUID());
     setPendingEscrowId(newEscrowId);
     setDialogPhase("approving");
@@ -146,7 +203,7 @@ export default function Marketplace() {
     }
   };
 
-  // ── STEP 2: Open trade on-chain, then save to backend ────────────────────────
+  // ── SELLER flow: STEP 2 — Open trade on-chain, then save to backend ──────────
   const handleOpenTrade = async () => {
     if (!pendingEscrowId || !selectedOffer || !user?.email) return;
 
@@ -163,14 +220,12 @@ export default function Marketplace() {
         amountUsdt: buyAmount,
       });
     } catch (err: any) {
-      // User rejected or tx failed — go back to "approved" so they can retry Step 2
       setDialogPhase("approved");
       const msg = err?.reason ?? err?.message ?? "Transaction rejected";
       toast.error((msg as string).slice(0, 120));
       return;
     }
 
-    // Save to backend
     setDialogPhase("saving");
     try {
       const payload = {
@@ -195,7 +250,7 @@ export default function Marketplace() {
       const resData = await res.json();
 
       if (!res.ok) {
-        setDialogPhase("approved"); // allow retry
+        setDialogPhase("approved");
         toast.error(resData?.error ?? "Failed to save trade");
         return;
       }
@@ -218,17 +273,22 @@ export default function Marketplace() {
       )
     : offers;
 
-  // Step states for the dialog progress tracker
+  // Step states for the seller wallet dialog progress tracker
   const step1State = ((): "done" | "active" | "pending" => {
     if (dialogPhase === "input") return "pending";
     if (dialogPhase === "approving") return "active";
-    return "done"; // approved, opening, saving
+    return "done";
   })();
   const step2State = ((): "done" | "active" | "pending" => {
     if (dialogPhase === "input" || dialogPhase === "approving" || dialogPhase === "approved") return "pending";
     if (dialogPhase === "opening") return "active";
-    return "done"; // saving
+    return "done";
   })();
+
+  // NGN total for selected amount
+  const ngnTotal = buyAmount && selectedOffer
+    ? (parseFloat(buyAmount) * selectedOffer.priceNaira).toLocaleString()
+    : "0";
 
   return (
     <div className="min-h-screen bg-[#0A0A0A]">
@@ -401,8 +461,8 @@ export default function Marketplace() {
       <Dialog open={buyDialogOpen} onOpenChange={handleDialogClose}>
         <DialogContent
           className="bg-card border-border sm:max-w-md"
-          onInteractOutside={(e) => { if (isBusy) e.preventDefault(); }}
-          onEscapeKeyDown={(e) => { if (isBusy) e.preventDefault(); }}
+          onInteractOutside={(e) => { if (isBusy || buyerLoading) e.preventDefault(); }}
+          onEscapeKeyDown={(e) => { if (isBusy || buyerLoading) e.preventDefault(); }}
         >
           <DialogHeader>
             <DialogTitle className="text-xl text-white">Buy USDT</DialogTitle>
@@ -433,8 +493,22 @@ export default function Marketplace() {
                 </div>
               </div>
 
-              {/* ── Amount inputs (only editable in input phase) ── */}
-              <div className={`space-y-2 transition-opacity ${dialogPhase !== "input" ? "opacity-50 pointer-events-none" : ""}`}>
+              {/* ── Wallet connection check ── */}
+              {!isConnected && (
+                <div className="flex items-center justify-between p-3 bg-amber-500/10 border border-amber-500/30 rounded-lg">
+                  <p className="text-sm text-amber-400 flex items-center gap-2">
+                    <AlertCircle className="w-4 h-4 flex-shrink-0" />
+                    Connect your wallet to verify your role
+                  </p>
+                  <Button size="sm" variant="outline" onClick={connectWallet}
+                    className="border-amber-500/40 text-amber-400 hover:bg-amber-500/10 ml-3 flex-shrink-0">
+                    Connect
+                  </Button>
+                </div>
+              )}
+
+              {/* ── Amount inputs ── */}
+              <div className={`space-y-2 transition-opacity ${(isBusy || buyerLoading) ? "opacity-50 pointer-events-none" : ""}`}>
                 <div className="space-y-1">
                   <label className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
                     I want to buy
@@ -476,7 +550,7 @@ export default function Marketplace() {
                   <div className="relative">
                     <Input
                       readOnly
-                      value={buyAmount ? (parseFloat(buyAmount) * selectedOffer.priceNaira).toLocaleString() : "0"}
+                      value={ngnTotal}
                       className="pr-16 bg-muted/30 border-border text-lg h-12 font-bold text-white"
                     />
                     <div className="absolute inset-y-0 right-0 flex items-center pr-3">
@@ -486,26 +560,45 @@ export default function Marketplace() {
                 </div>
               </div>
 
-              {/* ── Step progress tracker ── */}
-              <div className="bg-background border border-border rounded-lg p-4 space-y-3">
-                <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-1">
-                  Wallet Steps
-                </p>
-                <DialogStep
-                  n={1}
-                  label="Approve USDT spend in wallet"
-                  state={step1State}
-                />
-                <div className="ml-3 w-px h-3 bg-border" />
-                <DialogStep
-                  n={2}
-                  label="Sign &amp; lock funds in escrow"
-                  state={step2State}
-                />
-              </div>
+              {/* ── Role-based steps section ── */}
+              {isSeller ? (
+                /* SELLER: wallet steps to lock USDT in escrow */
+                <div className="bg-background border border-border rounded-lg p-4 space-y-3">
+                  <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-1">
+                    Wallet Steps
+                  </p>
+                  <DialogStep n={1} label="Approve USDT spend in wallet" state={step1State} />
+                  <div className="ml-3 w-px h-3 bg-border" />
+                  <DialogStep n={2} label="Sign &amp; lock funds in escrow" state={step2State} />
+                </div>
+              ) : (
+                /* BUYER: payment steps — no wallet interaction needed */
+                <div className="bg-background border border-border rounded-lg p-4 space-y-3">
+                  <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-1">
+                    Payment Steps
+                  </p>
+                  <div className="flex items-start gap-2">
+                    <div className="w-5 h-5 rounded-full bg-primary/20 text-primary text-[10px] font-bold flex items-center justify-center flex-shrink-0 mt-0.5">
+                      1
+                    </div>
+                    <p className="text-sm text-muted-foreground">
+                      Send <span className="text-white font-semibold">₦{ngnTotal} NGN</span> to the seller's bank account (shown on the trade page)
+                    </p>
+                  </div>
+                  <div className="ml-2.5 w-px h-3 bg-border" />
+                  <div className="flex items-start gap-2">
+                    <div className="w-5 h-5 rounded-full bg-primary/20 text-primary text-[10px] font-bold flex items-center justify-center flex-shrink-0 mt-0.5">
+                      2
+                    </div>
+                    <p className="text-sm text-muted-foreground">
+                      Tap <span className="text-white font-semibold">"I Have Paid"</span> on the trade page after your transfer is complete
+                    </p>
+                  </div>
+                </div>
+              )}
 
-              {/* ── Approved success banner ── */}
-              {(dialogPhase === "approved" || dialogPhase === "opening" || dialogPhase === "saving") && (
+              {/* ── Seller: Approved success banner ── */}
+              {isSeller && (dialogPhase === "approved" || dialogPhase === "opening" || dialogPhase === "saving") && (
                 <div className="flex items-center gap-2 p-3 bg-green-500/10 border border-green-500/30 rounded-lg">
                   <CheckCircle2 className="w-4 h-4 text-green-400 flex-shrink-0" />
                   <p className="text-sm text-green-400 font-medium">
@@ -518,7 +611,7 @@ export default function Marketplace() {
               <div className="flex items-center gap-2 text-xs text-muted-foreground">
                 <ShieldCheck className="w-3.5 h-3.5 text-primary" />
                 <a
-                  href="https://bscscan.com/address/0xCf9Fd90861085135f8661C29127A1F8F9ccA4061"
+                  href={`https://bscscan.com/address/${CONTRACT_ADDRESS}`}
                   target="_blank" rel="noopener noreferrer"
                   className="underline underline-offset-2 text-primary"
                 >
@@ -529,48 +622,56 @@ export default function Marketplace() {
             </div>
           )}
 
-          {/* ── Action buttons — change based on phase ── */}
+          {/* ── Action buttons ── */}
           <div className="flex gap-2 pt-2">
-            {/* Cancel button (hidden while wallet is open) */}
-            {!isBusy && (
-              <Button
-                variant="outline"
-                onClick={handleDialogClose}
-                className="border-border flex-1"
-              >
+            {/* Cancel */}
+            {!isBusy && !buyerLoading && (
+              <Button variant="outline" onClick={handleDialogClose} className="border-border flex-1">
                 Cancel
               </Button>
             )}
 
-            {/* Step 1: Approve USDT */}
-            {(dialogPhase === "input" || dialogPhase === "approving") && (
-              <Button
-                onClick={handleApproveUsdt}
-                disabled={!buyAmount || parseFloat(buyAmount) <= 0 || dialogPhase === "approving"}
-                className="bg-primary text-black hover:bg-primary/90 font-bold flex-1"
-              >
-                {dialogPhase === "approving" && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
-                <Wallet className="w-4 h-4 mr-2" />
-                {dialogPhase === "approving" ? "Waiting for wallet…" : "Step 1 — Approve USDT"}
-              </Button>
-            )}
-
-            {/* Step 2: Open Trade */}
-            {(dialogPhase === "approved" || dialogPhase === "opening" || dialogPhase === "saving") && (
-              <Button
-                onClick={handleOpenTrade}
-                disabled={dialogPhase === "opening" || dialogPhase === "saving"}
-                className="bg-primary text-black hover:bg-primary/90 font-bold flex-1"
-              >
-                {(dialogPhase === "opening" || dialogPhase === "saving") && (
-                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+            {isSeller ? (
+              /* SELLER buttons: two-step wallet flow */
+              <>
+                {(dialogPhase === "input" || dialogPhase === "approving") && (
+                  <Button
+                    onClick={handleApproveUsdt}
+                    disabled={!buyAmount || parseFloat(buyAmount) <= 0 || dialogPhase === "approving"}
+                    className="bg-primary text-black hover:bg-primary/90 font-bold flex-1"
+                  >
+                    {dialogPhase === "approving" && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
+                    <Wallet className="w-4 h-4 mr-2" />
+                    {dialogPhase === "approving" ? "Waiting for wallet…" : "Step 1 — Approve USDT"}
+                  </Button>
                 )}
-                <Lock className="w-4 h-4 mr-2" />
-                {dialogPhase === "opening"
-                  ? "Confirm in wallet…"
-                  : dialogPhase === "saving"
-                  ? "Saving trade…"
-                  : "Step 2 — Open Trade"}
+                {(dialogPhase === "approved" || dialogPhase === "opening" || dialogPhase === "saving") && (
+                  <Button
+                    onClick={handleOpenTrade}
+                    disabled={dialogPhase === "opening" || dialogPhase === "saving"}
+                    className="bg-primary text-black hover:bg-primary/90 font-bold flex-1"
+                  >
+                    {(dialogPhase === "opening" || dialogPhase === "saving") && (
+                      <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                    )}
+                    <Lock className="w-4 h-4 mr-2" />
+                    {dialogPhase === "opening"
+                      ? "Confirm in wallet…"
+                      : dialogPhase === "saving"
+                      ? "Saving trade…"
+                      : "Step 2 — Open Trade"}
+                  </Button>
+                )}
+              </>
+            ) : (
+              /* BUYER button: confirm trade without wallet */
+              <Button
+                onClick={handleBuyerInitiate}
+                disabled={!buyAmount || parseFloat(buyAmount) <= 0 || buyerLoading}
+                className="bg-primary text-black hover:bg-primary/90 font-bold flex-1"
+              >
+                {buyerLoading && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
+                {buyerLoading ? "Creating trade…" : "Confirm Trade"}
               </Button>
             )}
           </div>

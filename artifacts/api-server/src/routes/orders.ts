@@ -80,6 +80,80 @@ router.get("/orders", requireAuth, async (req, res) => {
   res.json(enriched);
 });
 
+/**
+ * POST /api/orders/initiate
+ *
+ * Buyer-initiated order. No on-chain escrow verification — the buyer has
+ * already agreed to send fiat and will mark payment via PATCH .../paid.
+ * The seller will lock USDT on-chain (using the same escrowId stored here)
+ * once they see the order on their dashboard.
+ *
+ * This route MUST be registered before /orders/:id to avoid the ":id" param
+ * swallowing the literal "initiate" segment.
+ */
+router.post("/orders/initiate", requireAuth, async (req, res) => {
+  const walletAddress = req.user!.address ?? req.user!.walletAddress;
+  logger.info(`=== POST /api/orders/initiate === Body: ${JSON.stringify(req.body)} | Wallet: ${walletAddress}`);
+
+  const { email, amount, token, sellerAddress, escrowId, priceNaira, offerId } = req.body;
+
+  const fail = (msg: string) => { res.status(400).json({ error: msg }); };
+
+  if (!email || typeof email !== "string") return void fail("Missing field: email");
+  if (amount === undefined || typeof amount !== "number" || amount <= 0)
+    return void fail("amount must be a positive number");
+  if (!token || typeof token !== "string") return void fail("Missing field: token");
+  if (!sellerAddress || !ethers.isAddress(sellerAddress)) return void fail("Invalid sellerAddress");
+  if (!escrowId || typeof escrowId !== "string") return void fail("Missing field: escrowId");
+  if (!ethers.isAddress(walletAddress)) return void fail("Wallet address must be a valid Ethereum address");
+
+  // Look up seller
+  const sellers = await db.select().from(usersTable)
+    .where(eq(usersTable.walletAddress, sellerAddress.toLowerCase()));
+  if (sellers.length === 0) {
+    res.status(400).json({ error: "Seller wallet address not registered on the platform" });
+    return;
+  }
+
+  // Prevent buyer and seller being the same account
+  if (walletAddress.toLowerCase() === sellerAddress.toLowerCase()) {
+    res.status(400).json({ error: "You cannot trade with yourself" });
+    return;
+  }
+
+  const decimals = (token.toUpperCase() === "USDT" || token.toUpperCase() === "USDC") ? 6 : 18;
+  const chainId = req.user!.chainId ?? 56;
+
+  let savedOrder: typeof ordersTable.$inferSelect;
+  try {
+    const inserted = await db.insert(ordersTable).values({
+      escrowId,
+      buyerId: req.user!.userId,
+      sellerId: sellers[0].id,
+      offerId: typeof offerId === "string" ? offerId : null,
+      amountUsdt: amount,
+      priceNaira: typeof priceNaira === "number" && priceNaira > 0 ? priceNaira : 0,
+      status: 0,
+      contractTx: null, // no on-chain tx yet — seller will lock escrow
+      email,
+      token,
+      sellerAddress: ethers.getAddress(sellerAddress),
+      buyerAddress: ethers.getAddress(walletAddress),
+      chainId,
+    }).returning();
+    savedOrder = inserted[0];
+    logger.info(`✓ Buyer-initiated order saved — orderId: ${savedOrder.id}`);
+  } catch (err: any) {
+    logger.error({ err: err?.message }, "✗ DB save failed for buyer-initiated order");
+    res.status(500).json({ error: "Failed to save order — please try again" });
+    return;
+  }
+
+  res.status(201).json({ success: true, orderId: savedOrder.id });
+  // silence unused-var warning
+  void decimals;
+});
+
 // POST /api/orders
 router.post("/orders", requireAuth, async (req, res) => {
   // ── 2. Log entire request at start ────────────────────────────────────────
