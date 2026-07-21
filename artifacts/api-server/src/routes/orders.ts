@@ -9,8 +9,31 @@ import { logger } from "../lib/logger";
 
 const router = Router();
 
+/** Public profile — safe to show to anyone */
 function toPublicProfile(u: typeof usersTable.$inferSelect) {
-  return { id: u.id, walletAddress: u.walletAddress, name: u.name, kycLevel: u.kycLevel, tradeCount: u.tradeCount, rating: u.rating, createdAt: u.createdAt };
+  return {
+    id: u.id,
+    walletAddress: u.walletAddress,
+    name: u.name,
+    kycLevel: u.kycLevel,
+    tradeCount: u.tradeCount,
+    rating: u.rating,
+    createdAt: u.createdAt,
+  };
+}
+
+/**
+ * Seller profile shown to the buyer in a trade.
+ * Includes bank details so the buyer knows where to send fiat.
+ * This is intentionally more detailed than toPublicProfile.
+ */
+function toSellerProfile(u: typeof usersTable.$inferSelect) {
+  return {
+    ...toPublicProfile(u),
+    bankName: u.bankName ?? null,
+    accountNumber: u.accountNumber ?? null,
+    accountName: u.accountName ?? null,
+  };
 }
 
 async function enrichOrder(order: typeof ordersTable.$inferSelect) {
@@ -19,12 +42,15 @@ async function enrichOrder(order: typeof ordersTable.$inferSelect) {
     db.select().from(usersTable).where(eq(usersTable.id, order.sellerId)),
     db.select().from(disputesTable).where(eq(disputesTable.orderId, order.id)),
   ]);
-  const offers = order.offerId ? await db.select().from(offersTable).where(eq(offersTable.id, order.offerId)) : [];
+  const offers = order.offerId
+    ? await db.select().from(offersTable).where(eq(offersTable.id, order.offerId))
+    : [];
   return {
     ...order,
-    buyer: buyers[0] ? toPublicProfile(buyers[0]) : null,
-    seller: sellers[0] ? toPublicProfile(sellers[0]) : null,
-    offer: offers[0] ?? null,
+    buyer:  buyers[0]  ? toPublicProfile(buyers[0])  : null,
+    // Seller includes bank details — buyer needs them to send fiat payment
+    seller: sellers[0] ? toSellerProfile(sellers[0]) : null,
+    offer:  offers[0]  ?? null,
     dispute: disputes[0] ?? null,
   };
 }
@@ -64,7 +90,7 @@ router.post("/orders", requireAuth, async (req, res) => {
   );
 
   // ── 1. Extract fields ─────────────────────────────────────────────────────
-  const { email, amount, token, sellerAddress, txHash } = req.body;
+  const { email, amount, token, sellerAddress, txHash, priceNaira, offerId } = req.body;
 
   // ── 3. Validate all fields (return 400 on any failure) ───────────────────
   const fail = (msg: string): false => {
@@ -161,8 +187,10 @@ router.post("/orders", requireAuth, async (req, res) => {
         escrowId,
         buyerId: req.user!.userId,
         sellerId: sellers[0].id,
+        offerId: typeof offerId === "string" ? offerId : null,
         amountUsdt: amount,
-        priceNaira: 0,
+        // Use the offer's priceNaira sent by the frontend; fall back to 0 if missing
+        priceNaira: typeof priceNaira === "number" && priceNaira > 0 ? priceNaira : 0,
         status: 0,
         contractTx: txHash,
         email,

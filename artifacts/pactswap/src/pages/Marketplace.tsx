@@ -7,15 +7,27 @@ import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle,
-  DialogFooter, DialogDescription,
+  DialogDescription,
 } from "@/components/ui/dialog";
-import { Loader2, Search, Star, ShieldCheck, ArrowDownUp, CheckCircle2 } from "lucide-react";
+import {
+  Loader2, Search, Star, ShieldCheck, ArrowDownUp,
+  CheckCircle2, Wallet, Lock,
+} from "lucide-react";
 import { toast } from "sonner";
 import { useAuth } from "@/contexts/AuthContext";
-import { createEscrow } from "@/lib/contract";
+import { approveUsdtForEscrow, openEscrowOnChain } from "@/lib/contract";
 
 const MAX_TEST_USDT = 1;
 
+// ── Phase types ───────────────────────────────────────────────────────────────
+type DialogPhase =
+  | "input"      // Enter amount
+  | "approving"  // Wallet popup: approve USDT
+  | "approved"   // Approval done, waiting for user to click Open Trade
+  | "opening"    // Wallet popup: createEscrow
+  | "saving";    // Saving to backend
+
+// ── Small helpers ─────────────────────────────────────────────────────────────
 function MerchantAvatar({ name }: { name?: string }) {
   const letter = name?.charAt(0).toUpperCase() || "S";
   return (
@@ -26,71 +38,152 @@ function MerchantAvatar({ name }: { name?: string }) {
 }
 
 function kycLabel(level: number) {
-  if (level >= 3) return <span className="text-[10px] text-primary font-medium flex items-center gap-0.5"><ShieldCheck className="w-3 h-3" /> Verified</span>;
-  if (level === 2) return <span className="text-[10px] text-slate-400 font-medium flex items-center gap-0.5"><ShieldCheck className="w-3 h-3" /> KYC2</span>;
+  if (level >= 3) return (
+    <span className="text-[10px] text-primary font-medium flex items-center gap-0.5">
+      <ShieldCheck className="w-3 h-3" /> Verified
+    </span>
+  );
+  if (level === 2) return (
+    <span className="text-[10px] text-slate-400 font-medium flex items-center gap-0.5">
+      <ShieldCheck className="w-3 h-3" /> KYC2
+    </span>
+  );
   return null;
 }
 
+// ── Step indicator inside dialog ──────────────────────────────────────────────
+function DialogStep({
+  n, label, state,
+}: { n: number; label: string; state: "done" | "active" | "pending" }) {
+  return (
+    <div className="flex items-center gap-2">
+      <div className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold flex-shrink-0 transition-colors ${
+        state === "done"    ? "bg-green-500 text-white" :
+        state === "active"  ? "bg-primary text-black" :
+        "bg-muted/40 text-muted-foreground border border-border"
+      }`}>
+        {state === "done" ? <CheckCircle2 className="w-3.5 h-3.5" /> : n}
+      </div>
+      <span className={`text-sm ${
+        state === "done" ? "text-green-400 line-through" :
+        state === "active" ? "text-white font-semibold" :
+        "text-muted-foreground"
+      }`}>{label}</span>
+      {state === "active" && <Loader2 className="w-3.5 h-3.5 animate-spin text-primary ml-auto" />}
+    </div>
+  );
+}
+
+// ── Main component ─────────────────────────────────────────────────────────────
 export default function Marketplace() {
   const [, setLocation] = useLocation();
   const [tab, setTab] = useState<"buy" | "sell">("buy");
   const [amountFilter, setAmountFilter] = useState("");
+
+  // Dialog state
   const [buyDialogOpen, setBuyDialogOpen] = useState(false);
   const [selectedOffer, setSelectedOffer] = useState<any>(null);
   const [buyAmount, setBuyAmount] = useState("");
-  const [tradeStep, setTradeStep] = useState<
-    "idle" | "approving" | "signing" | "verifying" | "saving"
-  >("idle");
+  const [dialogPhase, setDialogPhase] = useState<DialogPhase>("input");
+  const [pendingEscrowId, setPendingEscrowId] = useState<string | null>(null);
 
-  const tradeStepLabel: Record<typeof tradeStep, string> = {
-    idle:      "Open Trade",
-    approving: "Step 1/3 — Approve USDT…",
-    signing:   "Step 2/3 — Sign Escrow…",
-    verifying: "Step 3/3 — Verifying on-chain…",
-    saving:    "Saving trade…",
-  };
-  const isBlockchainPending = tradeStep !== "idle";
+  const isBusy = dialogPhase !== "input" && dialogPhase !== "approved";
 
   const { user, token } = useAuth();
   const { data, isLoading } = useListOffers();
 
+  // ── Open dialog ──────────────────────────────────────────────────────────────
   const handleBuyClick = (offer: any) => {
     if (!token) { setLocation("/login"); return; }
     setSelectedOffer(offer);
     setBuyAmount("");
+    setDialogPhase("input");
+    setPendingEscrowId(null);
     setBuyDialogOpen(true);
   };
 
-  const handleConfirmBuy = async () => {
-    const amountNum = parseFloat(buyAmount);
-    if (!buyAmount || isNaN(amountNum)) { toast.error("Please enter a valid amount"); return; }
-    if (amountNum > MAX_TEST_USDT) { toast.error(`Test limit is ${MAX_TEST_USDT} USDT`); return; }
+  const handleDialogClose = () => {
+    if (isBusy) return; // prevent closing while wallet is open
+    setBuyDialogOpen(false);
+    setDialogPhase("input");
+    setPendingEscrowId(null);
+  };
+
+  // ── Validate amount fields ────────────────────────────────────────────────────
+  function validateAmount(amountNum: number): boolean {
+    if (!buyAmount || isNaN(amountNum)) { toast.error("Please enter a valid amount"); return false; }
+    if (amountNum > MAX_TEST_USDT) { toast.error(`Test cap is ${MAX_TEST_USDT} USDT`); return false; }
     if (amountNum < selectedOffer.minTrade || amountNum > selectedOffer.maxTrade) {
-      toast.error(`Amount must be between ${selectedOffer.minTrade} and ${selectedOffer.maxTrade} USDT`); return;
+      toast.error(`Amount must be ${selectedOffer.minTrade}–${selectedOffer.maxTrade} USDT`); return false;
     }
-    if (amountNum > selectedOffer.amountUsdt) { toast.error(`Max available: ${selectedOffer.amountUsdt} USDT`); return; }
+    if (amountNum > selectedOffer.amountUsdt) {
+      toast.error(`Only ${selectedOffer.amountUsdt} USDT available`); return false;
+    }
+    return true;
+  }
 
-    const email = user?.email;
-    if (!email) { alert("Please login"); return; }
+  // ── STEP 1: Approve USDT ─────────────────────────────────────────────────────
+  const handleApproveUsdt = async () => {
+    const amountNum = parseFloat(buyAmount);
+    if (!validateAmount(amountNum)) return;
+    if (!user?.email) { toast.error("Please log in first"); return; }
+    if (!selectedOffer.seller?.walletAddress) { toast.error("Seller address not found"); return; }
 
-    const sellerAddress = selectedOffer.seller?.walletAddress;
-    if (!sellerAddress) { toast.error("Seller address not found"); return; }
+    // Generate the escrowId now — same one will be used in Step 2 + backend
+    const newEscrowId = ethers.id(crypto.randomUUID());
+    setPendingEscrowId(newEscrowId);
+    setDialogPhase("approving");
 
-    setTradeStep("approving");
     try {
-      const escrowId = ethers.id(crypto.randomUUID());
+      await approveUsdtForEscrow(buyAmount);
+      setDialogPhase("approved");
+      toast.success("USDT approved ✓ — now click Open Trade to lock funds in escrow.");
+    } catch (err: any) {
+      setDialogPhase("input");
+      setPendingEscrowId(null);
+      const msg = err?.reason ?? err?.message ?? "Approval was cancelled";
+      toast.error((msg as string).slice(0, 120));
+    }
+  };
 
-      // User's wallet signs two transactions (approve + createEscrow).
-      // Server never signs anything — it only reads the on-chain state afterwards.
-      const txHash = await createEscrow({
-        escrowId,
+  // ── STEP 2: Open trade on-chain, then save to backend ────────────────────────
+  const handleOpenTrade = async () => {
+    if (!pendingEscrowId || !selectedOffer || !user?.email) return;
+
+    const amountNum = parseFloat(buyAmount);
+    const sellerAddress = selectedOffer.seller?.walletAddress;
+
+    setDialogPhase("opening");
+
+    let txHash: string;
+    try {
+      txHash = await openEscrowOnChain({
+        escrowId: pendingEscrowId,
         sellerAddress,
         amountUsdt: buyAmount,
-        onStep: (step) => setTradeStep(step),
       });
+    } catch (err: any) {
+      // User rejected or tx failed — go back to "approved" so they can retry Step 2
+      setDialogPhase("approved");
+      const msg = err?.reason ?? err?.message ?? "Transaction rejected";
+      toast.error((msg as string).slice(0, 120));
+      return;
+    }
 
-      setTradeStep("saving");
-      const payload = { email, amount: amountNum, token: "USDT", sellerAddress, txHash, escrowId };
+    // Save to backend
+    setDialogPhase("saving");
+    try {
+      const payload = {
+        email: user.email,
+        amount: amountNum,
+        token: "USDT",
+        sellerAddress,
+        txHash,
+        escrowId: pendingEscrowId,
+        priceNaira: selectedOffer.priceNaira,
+        offerId: selectedOffer.id,
+      };
+
       const res = await fetch("/api/orders", {
         method: "POST",
         headers: {
@@ -100,23 +193,42 @@ export default function Marketplace() {
         body: JSON.stringify(payload),
       });
       const resData = await res.json();
-      if (!res.ok) { toast.error(resData?.error ?? "Failed to create order"); return; }
 
-      toast.success("Trade opened successfully!");
+      if (!res.ok) {
+        setDialogPhase("approved"); // allow retry
+        toast.error(resData?.error ?? "Failed to save trade");
+        return;
+      }
+
+      toast.success("Trade opened! USDT is locked in escrow.");
       setBuyDialogOpen(false);
+      setDialogPhase("input");
       setLocation(`/orders/${resData.orderId}`);
-    } catch (err: any) {
-      const msg = err?.reason ?? err?.message ?? "Transaction failed or rejected";
-      toast.error(msg.length > 120 ? msg.slice(0, 120) + "…" : msg);
-    } finally {
-      setTradeStep("idle");
+    } catch {
+      setDialogPhase("approved");
+      toast.error("Network error — please try again");
     }
   };
 
   const offers = data?.offers ?? [];
   const filtered = amountFilter
-    ? offers.filter((o: any) => o.minTrade <= parseFloat(amountFilter) && parseFloat(amountFilter) <= o.maxTrade)
+    ? offers.filter((o: any) =>
+        o.minTrade <= parseFloat(amountFilter) &&
+        parseFloat(amountFilter) <= o.maxTrade
+      )
     : offers;
+
+  // Step states for the dialog progress tracker
+  const step1State = ((): "done" | "active" | "pending" => {
+    if (dialogPhase === "input") return "pending";
+    if (dialogPhase === "approving") return "active";
+    return "done"; // approved, opening, saving
+  })();
+  const step2State = ((): "done" | "active" | "pending" => {
+    if (dialogPhase === "input" || dialogPhase === "approving" || dialogPhase === "approved") return "pending";
+    if (dialogPhase === "opening") return "active";
+    return "done"; // saving
+  })();
 
   return (
     <div className="min-h-screen bg-[#0A0A0A]">
@@ -134,9 +246,7 @@ export default function Marketplace() {
           <button
             onClick={() => setTab("buy")}
             className={`px-6 py-2 rounded font-semibold text-sm transition-colors ${
-              tab === "buy"
-                ? "bg-primary text-black"
-                : "text-muted-foreground hover:text-white"
+              tab === "buy" ? "bg-primary text-black" : "text-muted-foreground hover:text-white"
             }`}
           >
             Buy
@@ -144,9 +254,7 @@ export default function Marketplace() {
           <button
             onClick={() => setTab("sell")}
             className={`px-6 py-2 rounded font-semibold text-sm transition-colors ${
-              tab === "sell"
-                ? "bg-primary text-black"
-                : "text-muted-foreground hover:text-white"
+              tab === "sell" ? "bg-primary text-black" : "text-muted-foreground hover:text-white"
             }`}
           >
             Sell
@@ -165,7 +273,7 @@ export default function Marketplace() {
           </div>
         </div>
 
-        {/* ── Table ────────────────────────────────────────────────────── */}
+        {/* ── Table / cards ────────────────────────────────────────────── */}
         {tab === "sell" ? (
           <div className="bg-card border border-border rounded-xl p-16 text-center">
             <p className="text-muted-foreground">Sell orders coming soon. Post an offer to start selling.</p>
@@ -202,7 +310,6 @@ export default function Marketplace() {
                 <tbody className="divide-y divide-border/50">
                   {filtered.map((offer: any) => (
                     <tr key={offer.id} className="bg-[#0A0A0A] hover:bg-card/60 transition-colors">
-                      {/* Merchant */}
                       <td className="px-6 py-4">
                         <div className="flex items-center gap-3">
                           <MerchantAvatar name={offer.seller?.name} />
@@ -226,33 +333,19 @@ export default function Marketplace() {
                           </div>
                         </div>
                       </td>
-
-                      {/* Price */}
                       <td className="px-6 py-4">
-                        <span className="text-xl font-black text-primary">
-                          ₦{offer.priceNaira.toLocaleString()}
-                        </span>
+                        <span className="text-xl font-black text-primary">₦{offer.priceNaira.toLocaleString()}</span>
                         <span className="text-xs text-muted-foreground block">per USDT</span>
                       </td>
-
-                      {/* Limit / Available */}
                       <td className="px-6 py-4">
-                        <div className="text-sm text-white font-medium">
-                          {offer.minTrade} – {offer.maxTrade} USDT
-                        </div>
-                        <div className="text-xs text-muted-foreground mt-0.5">
-                          {offer.amountUsdt} USDT available
-                        </div>
+                        <div className="text-sm text-white font-medium">{offer.minTrade} – {offer.maxTrade} USDT</div>
+                        <div className="text-xs text-muted-foreground mt-0.5">{offer.amountUsdt} USDT available</div>
                       </td>
-
-                      {/* Payment */}
                       <td className="px-6 py-4">
                         <Badge className="bg-muted/40 text-white border-border text-xs font-normal">
                           Bank Transfer
                         </Badge>
                       </td>
-
-                      {/* Trade */}
                       <td className="px-6 py-4 text-right">
                         <Button
                           onClick={() => handleBuyClick(offer)}
@@ -304,19 +397,24 @@ export default function Marketplace() {
         )}
       </div>
 
-      {/* ── Buy dialog ───────────────────────────────────────────────── */}
-      <Dialog open={buyDialogOpen} onOpenChange={setBuyDialogOpen}>
-        <DialogContent className="bg-card border-border sm:max-w-md">
+      {/* ── Buy dialog ───────────────────────────────────────────────────────── */}
+      <Dialog open={buyDialogOpen} onOpenChange={handleDialogClose}>
+        <DialogContent
+          className="bg-card border-border sm:max-w-md"
+          onInteractOutside={(e) => { if (isBusy) e.preventDefault(); }}
+          onEscapeKeyDown={(e) => { if (isBusy) e.preventDefault(); }}
+        >
           <DialogHeader>
             <DialogTitle className="text-xl text-white">Buy USDT</DialogTitle>
             <DialogDescription className="text-muted-foreground text-sm">
-              Funds are locked in PACTSWAP smart contract escrow until the trade completes.
+              Funds lock in PACTSWAP smart-contract escrow until the trade completes.
             </DialogDescription>
           </DialogHeader>
 
           {selectedOffer && (
-            <div className="py-2 space-y-5">
-              {/* Offer summary */}
+            <div className="py-2 space-y-4">
+
+              {/* ── Merchant summary ── */}
               <div className="flex items-center gap-3 p-3 bg-background border border-border rounded-lg">
                 <MerchantAvatar name={selectedOffer.seller?.name} />
                 <div className="flex-1">
@@ -324,7 +422,9 @@ export default function Marketplace() {
                   <div className="flex items-center gap-1 text-xs text-primary">
                     <Star className="w-3 h-3 fill-primary" />
                     {selectedOffer.seller?.rating?.toFixed(1) ?? "5.0"}
-                    <span className="text-muted-foreground ml-1">{selectedOffer.seller?.tradeCount ?? 0} orders</span>
+                    <span className="text-muted-foreground ml-1">
+                      {selectedOffer.seller?.tradeCount ?? 0} orders
+                    </span>
                   </div>
                 </div>
                 <div className="text-right">
@@ -333,8 +433,8 @@ export default function Marketplace() {
                 </div>
               </div>
 
-              {/* Amount inputs */}
-              <div className="space-y-2">
+              {/* ── Amount inputs (only editable in input phase) ── */}
+              <div className={`space-y-2 transition-opacity ${dialogPhase !== "input" ? "opacity-50 pointer-events-none" : ""}`}>
                 <div className="space-y-1">
                   <label className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
                     I want to buy
@@ -355,18 +455,20 @@ export default function Marketplace() {
                     <div className="absolute inset-y-0 right-0 flex items-center pr-3 gap-1">
                       <button
                         className="text-[11px] text-primary border border-primary/30 rounded px-1 hover:bg-primary/10"
-                        onClick={() => setBuyAmount(Math.min(selectedOffer.maxTrade, selectedOffer.amountUsdt, MAX_TEST_USDT).toString())}
-                      >Max</button>
+                        onClick={() => setBuyAmount(
+                          Math.min(selectedOffer.maxTrade, selectedOffer.amountUsdt, MAX_TEST_USDT).toString()
+                        )}
+                      >
+                        Max
+                      </button>
                       <span className="text-primary font-bold text-sm">USDT</span>
                     </div>
                   </div>
-                  <p className="text-xs text-amber-400">⚠ Test cap: {MAX_TEST_USDT} USDT max on mainnet</p>
+                  <p className="text-xs text-amber-400">⚠ Test cap: {MAX_TEST_USDT} USDT</p>
                 </div>
-
                 <div className="flex justify-center">
                   <ArrowDownUp className="w-4 h-4 text-muted-foreground" />
                 </div>
-
                 <div className="space-y-1">
                   <label className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
                     I will pay
@@ -384,39 +486,94 @@ export default function Marketplace() {
                 </div>
               </div>
 
-              {/* Trust badge — dark themed */}
-              <div className="bg-primary/5 border border-primary/20 rounded-lg p-3 space-y-1.5 text-sm">
-                <div className="flex items-center gap-2 text-primary font-semibold">
-                  <CheckCircle2 className="w-4 h-4" />
-                  <a
-                    href="https://bscscan.com/address/0xCf9Fd90861085135f8661C29127A1F8F9ccA4061"
-                    target="_blank" rel="noopener noreferrer"
-                    className="underline underline-offset-2"
-                  >
-                    Verified on BSCScan
-                  </a>
+              {/* ── Step progress tracker ── */}
+              <div className="bg-background border border-border rounded-lg p-4 space-y-3">
+                <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-1">
+                  Wallet Steps
+                </p>
+                <DialogStep
+                  n={1}
+                  label="Approve USDT spend in wallet"
+                  state={step1State}
+                />
+                <div className="ml-3 w-px h-3 bg-border" />
+                <DialogStep
+                  n={2}
+                  label="Sign &amp; lock funds in escrow"
+                  state={step2State}
+                />
+              </div>
+
+              {/* ── Approved success banner ── */}
+              {(dialogPhase === "approved" || dialogPhase === "opening" || dialogPhase === "saving") && (
+                <div className="flex items-center gap-2 p-3 bg-green-500/10 border border-green-500/30 rounded-lg">
+                  <CheckCircle2 className="w-4 h-4 text-green-400 flex-shrink-0" />
+                  <p className="text-sm text-green-400 font-medium">
+                    USDT approved — now lock {buyAmount} USDT in escrow to open the trade.
+                  </p>
                 </div>
-                <div className="flex items-center gap-2 text-muted-foreground text-xs">
-                  <ShieldCheck className="w-3.5 h-3.5 text-primary" />
-                  Contract: 0xCf9F...A4061 · 2.5% fee on completion only
-                </div>
+              )}
+
+              {/* ── Contract trust badge ── */}
+              <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                <ShieldCheck className="w-3.5 h-3.5 text-primary" />
+                <a
+                  href="https://bscscan.com/address/0xCf9Fd90861085135f8661C29127A1F8F9ccA4061"
+                  target="_blank" rel="noopener noreferrer"
+                  className="underline underline-offset-2 text-primary"
+                >
+                  Verified escrow contract
+                </a>
+                <span>· 2.5% fee on release only</span>
               </div>
             </div>
           )}
 
-          <DialogFooter className="gap-2">
-            <Button variant="outline" onClick={() => setBuyDialogOpen(false)} className="border-border">
-              Cancel
-            </Button>
-            <Button
-              onClick={handleConfirmBuy}
-              className="bg-primary text-black hover:bg-primary/90 font-bold"
-              disabled={!buyAmount || parseFloat(buyAmount) <= 0 || isBlockchainPending}
-            >
-              {isBlockchainPending && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
-              {tradeStepLabel[tradeStep]}
-            </Button>
-          </DialogFooter>
+          {/* ── Action buttons — change based on phase ── */}
+          <div className="flex gap-2 pt-2">
+            {/* Cancel button (hidden while wallet is open) */}
+            {!isBusy && (
+              <Button
+                variant="outline"
+                onClick={handleDialogClose}
+                className="border-border flex-1"
+              >
+                Cancel
+              </Button>
+            )}
+
+            {/* Step 1: Approve USDT */}
+            {(dialogPhase === "input" || dialogPhase === "approving") && (
+              <Button
+                onClick={handleApproveUsdt}
+                disabled={!buyAmount || parseFloat(buyAmount) <= 0 || dialogPhase === "approving"}
+                className="bg-primary text-black hover:bg-primary/90 font-bold flex-1"
+              >
+                {dialogPhase === "approving" && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
+                <Wallet className="w-4 h-4 mr-2" />
+                {dialogPhase === "approving" ? "Waiting for wallet…" : "Step 1 — Approve USDT"}
+              </Button>
+            )}
+
+            {/* Step 2: Open Trade */}
+            {(dialogPhase === "approved" || dialogPhase === "opening" || dialogPhase === "saving") && (
+              <Button
+                onClick={handleOpenTrade}
+                disabled={dialogPhase === "opening" || dialogPhase === "saving"}
+                className="bg-primary text-black hover:bg-primary/90 font-bold flex-1"
+              >
+                {(dialogPhase === "opening" || dialogPhase === "saving") && (
+                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                )}
+                <Lock className="w-4 h-4 mr-2" />
+                {dialogPhase === "opening"
+                  ? "Confirm in wallet…"
+                  : dialogPhase === "saving"
+                  ? "Saving trade…"
+                  : "Step 2 — Open Trade"}
+              </Button>
+            )}
+          </div>
         </DialogContent>
       </Dialog>
     </div>
