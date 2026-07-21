@@ -6,13 +6,7 @@ export const USDT_ADDRESS = "0x55d398326f99059fF775485246999027B3197955";
 const BSC_RPC = "https://bsc-dataseed1.binance.org/";
 
 const ABI = [
-  // Write
-  "function createEscrow(bytes32 _escrowId, address _seller, uint256 _amount) external",
-  "function confirmDelivery(bytes32 _escrowId) external",
-  "function releaseEscrow(bytes32 _escrowId) external",
-  "function refundEscrow(bytes32 _escrowId) external",
-  "function processExpiredEscrows() external",
-  // Read
+  // Read-only
   "function escrows(bytes32) external view returns (address buyer, address seller, uint256 amount, uint256 createdAt, bool released, bool refunded, bool sellerConfirmed)",
   "function getActiveEscrowCount() external view returns (uint256)",
   "function activeEscrowIds(uint256) external view returns (bytes32)",
@@ -20,77 +14,60 @@ const ABI = [
   "function feeRecipient() external view returns (address)",
   "function FEE_BPS() external view returns (uint256)",
   "function AUTO_RELEASE_TIME() external view returns (uint256)",
-  // Events
+  // Events (read-only)
   "event EscrowCreated(bytes32 indexed escrowId, address indexed buyer, address indexed seller, uint256 amount)",
   "event EscrowReleased(bytes32 indexed escrowId, address to, uint256 sellerAmount, uint256 feeAmount)",
   "event EscrowRefunded(bytes32 indexed escrowId, address to, uint256 amount)",
   "event SellerConfirmed(bytes32 indexed escrowId)",
 ];
 
+// ── Provider (read-only, no private key needed) ───────────────────────────────
+
 function getProvider() {
   return new ethers.JsonRpcProvider(BSC_RPC);
 }
 
-function getSigner() {
-  const privateKey = process.env.PRIVATE_KEY;
-  if (!privateKey) throw new Error("PRIVATE_KEY not configured");
-  return new ethers.Wallet(privateKey, getProvider());
+/** Read-only contract instance. Server never signs anything. */
+export function getContract() {
+  return new ethers.Contract(CONTRACT_ADDRESS, ABI, getProvider());
 }
 
-export function getContract(signed = false) {
-  const runner = signed ? getSigner() : getProvider();
-  return new ethers.Contract(CONTRACT_ADDRESS, ABI, runner);
-}
-
-export async function releaseEscrow(escrowId: string): Promise<string | null> {
-  try {
-    const contract = getContract(true);
-    const tx = await contract.releaseEscrow(escrowId);
-    await tx.wait();
-    logger.info({ txHash: tx.hash, escrowId }, "releaseEscrow executed");
-    return tx.hash as string;
-  } catch (err) {
-    logger.error({ err, escrowId }, "releaseEscrow failed");
-    return null;
-  }
-}
-
-export async function refundEscrow(escrowId: string): Promise<string | null> {
-  try {
-    const contract = getContract(true);
-    const tx = await contract.refundEscrow(escrowId);
-    await tx.wait();
-    logger.info({ txHash: tx.hash, escrowId }, "refundEscrow executed");
-    return tx.hash as string;
-  } catch (err) {
-    logger.error({ err, escrowId }, "refundEscrow failed");
-    return null;
-  }
-}
-
-export async function processExpiredEscrows(): Promise<string | null> {
-  try {
-    const contract = getContract(true);
-    const tx = await contract.processExpiredEscrows();
-    await tx.wait();
-    logger.info({ txHash: tx.hash }, "processExpiredEscrows executed");
-    return tx.hash as string;
-  } catch (err) {
-    logger.error({ err }, "processExpiredEscrows failed");
-    return null;
-  }
-}
+// ── On-chain read helpers ─────────────────────────────────────────────────────
 
 export async function readEscrow(escrowId: string) {
   const contract = getContract();
   const result = await contract.escrows(escrowId);
   return {
-    buyer: result[0] as string,
-    seller: result[1] as string,
-    amount: result[2] as bigint,
-    createdAt: result[3] as bigint,
-    released: result[4] as boolean,
-    refunded: result[5] as boolean,
+    buyer:           result[0] as string,
+    seller:          result[1] as string,
+    amount:          result[2] as bigint,
+    createdAt:       result[3] as bigint,
+    released:        result[4] as boolean,
+    refunded:        result[5] as boolean,
     sellerConfirmed: result[6] as boolean,
   };
+}
+
+/**
+ * Verify that a transaction hash is confirmed on BSC.
+ * Returns { confirmed: true } when status === 1 (success).
+ * Does NOT require any private key.
+ */
+export async function verifyTxHash(
+  txHash: string,
+): Promise<{ confirmed: boolean; blockNumber: number | null }> {
+  try {
+    const provider = getProvider();
+    const receipt = await provider.getTransactionReceipt(txHash);
+    if (!receipt) {
+      return { confirmed: false, blockNumber: null };
+    }
+    return {
+      confirmed: receipt.status === 1,
+      blockNumber: receipt.blockNumber,
+    };
+  } catch (err) {
+    logger.error({ err, txHash }, "verifyTxHash RPC error");
+    return { confirmed: false, blockNumber: null };
+  }
 }

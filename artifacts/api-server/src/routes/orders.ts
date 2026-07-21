@@ -4,7 +4,7 @@ import { db } from "@workspace/db";
 import { ordersTable, offersTable, usersTable, disputesTable } from "@workspace/db";
 import { eq, or } from "drizzle-orm";
 import { requireAuth } from "../middlewares/authMiddleware";
-import { getContract, releaseEscrow } from "../lib/contract";
+import { verifyTxHash, readEscrow } from "../lib/contract";
 import { logger } from "../lib/logger";
 
 const router = Router();
@@ -100,28 +100,25 @@ router.post("/orders", requireAuth, async (req, res) => {
     `✓ Converted ${amount} ${tokenUpper} to ${amountInUnits.toString()} units (${decimals} decimals)`,
   );
 
-  // ── 5. Smart contract call (validate first, never before) ─────────────────
-  const escrowId = ethers.id(crypto.randomUUID()); // deterministic bytes32
-  let contractTxHash: string;
-  try {
-    const contract = getContract(true);
-    const tx = await contract.createEscrow(
-      escrowId,
-      ethers.getAddress(sellerAddress),
-      amountInUnits,
-    );
-    await tx.wait();
-    contractTxHash = tx.hash as string;
-    logger.info(`✓ createEscrow succeeded — txHash: ${contractTxHash}`);
-  } catch (err: any) {
-    const errMsg: string = err?.reason || err?.message || "Contract call failed";
-    logger.error({ errMsg, escrowId }, "✗ createEscrow failed");
-    res.status(400).json({ error: errMsg });
+  // ── 5. Verify txHash on BSC (read-only — server never signs) ─────────────
+  // The frontend wallet already called createEscrow(); we just confirm the tx.
+  const { confirmed: txConfirmed } = await verifyTxHash(txHash);
+  if (!txConfirmed) {
+    logger.warn({ txHash }, "✗ txHash not confirmed on BSC");
+    res.status(400).json({ error: "Transaction not confirmed on BSC. Please wait for confirmation and try again." });
+    return;
+  }
+  logger.info(`✓ txHash confirmed on BSC: ${txHash}`);
+
+  // ── 6. Read escrow data from contract to get the escrowId ─────────────────
+  // The frontend sends escrowId it used when calling createEscrow()
+  const { escrowId } = req.body;
+  if (!escrowId || typeof escrowId !== "string") {
+    res.status(400).json({ error: "Missing field: escrowId" });
     return;
   }
 
-  // ── 6. Database save — ONLY after contract succeeds ───────────────────────
-  // Resolve seller user record by wallet address
+  // ── 7. Database save ──────────────────────────────────────────────────────
   const sellers = await db
     .select()
     .from(usersTable)
@@ -142,7 +139,7 @@ router.post("/orders", requireAuth, async (req, res) => {
         amountUsdt: amount,
         priceNaira: 0,
         status: 0,
-        contractTx: contractTxHash,
+        contractTx: txHash,
         email,
         token,
         sellerAddress: ethers.getAddress(sellerAddress),
@@ -154,15 +151,12 @@ router.post("/orders", requireAuth, async (req, res) => {
     logger.info(`✓ Order saved — orderId: ${savedOrder.id}`);
   } catch (err: any) {
     logger.error({ err: err?.message }, "✗ DB save failed after on-chain success");
-    res.status(500).json({
-      error: "Order created on-chain but failed to save locally",
-      txHash: contractTxHash,
-    });
+    res.status(500).json({ error: "Order verified on-chain but failed to save locally", txHash });
     return;
   }
 
-  // ── 7. Success (HTTP 201, only after DB save) ─────────────────────────────
-  res.status(201).json({ success: true, orderId: savedOrder.id, txHash: contractTxHash });
+  // ── 8. Success ────────────────────────────────────────────────────────────
+  res.status(201).json({ success: true, orderId: savedOrder.id, txHash });
 });
 
 // GET /api/orders/:id
@@ -206,7 +200,15 @@ router.patch("/orders/:id/paid", requireAuth, async (req, res) => {
 });
 
 // PATCH /api/orders/:id/confirm
+// Seller calls this AFTER their wallet has already called releaseEscrow() on-chain.
+// Body: { txHash: string }  — the on-chain release transaction hash
 router.patch("/orders/:id/confirm", requireAuth, async (req, res) => {
+  const { txHash } = req.body;
+  if (!txHash || typeof txHash !== "string") {
+    res.status(400).json({ error: "txHash is required (the on-chain releaseEscrow transaction)" });
+    return;
+  }
+
   const orders = await db.select().from(ordersTable).where(eq(ordersTable.id, req.params.id));
   if (orders.length === 0) {
     res.status(404).json({ error: "Order not found" });
@@ -214,26 +216,38 @@ router.patch("/orders/:id/confirm", requireAuth, async (req, res) => {
   }
   const order = orders[0];
   if (order.sellerId !== req.user!.userId) {
-    res.status(403).json({ error: "Only the seller can confirm payment" });
+    res.status(403).json({ error: "Only the seller can confirm release" });
     return;
   }
   if (order.status !== 1) {
     res.status(400).json({ error: "Order is not in 'paid' status" });
     return;
   }
-  // Call releaseEscrow on-chain (fire-and-forget if PRIVATE_KEY not set)
-  const escrowTxHash = await releaseEscrow(order.escrowId).catch((err) => {
-    logger.warn({ err, orderId: order.id }, "releaseEscrow skipped or failed — proceeding with DB update");
-    return null;
-  });
-  if (escrowTxHash) {
-    logger.info({ txHash: escrowTxHash, orderId: order.id }, "releaseEscrow confirmed on-chain");
-  }
 
-  const updated = await db.update(ordersTable).set({ status: 2, updatedAt: new Date() }).where(eq(ordersTable.id, order.id)).returning();
-  // Update trade counts
-  await db.update(usersTable).set({ tradeCount: (await db.select().from(usersTable).where(eq(usersTable.id, order.buyerId)))[0].tradeCount + 1 }).where(eq(usersTable.id, order.buyerId));
-  await db.update(usersTable).set({ tradeCount: (await db.select().from(usersTable).where(eq(usersTable.id, order.sellerId)))[0].tradeCount + 1 }).where(eq(usersTable.id, order.sellerId));
+  // Verify release tx on BSC (read-only — server never signs)
+  const { confirmed } = await verifyTxHash(txHash);
+  if (!confirmed) {
+    res.status(400).json({ error: "Release transaction not confirmed on BSC yet. Please wait and try again." });
+    return;
+  }
+  logger.info({ txHash, orderId: order.id }, "releaseEscrow tx verified on-chain");
+
+  const updated = await db
+    .update(ordersTable)
+    .set({ status: 2, updatedAt: new Date() })
+    .where(eq(ordersTable.id, order.id))
+    .returning();
+
+  // Update trade counts for both parties
+  const [buyer, seller] = await Promise.all([
+    db.select().from(usersTable).where(eq(usersTable.id, order.buyerId)),
+    db.select().from(usersTable).where(eq(usersTable.id, order.sellerId)),
+  ]);
+  await Promise.all([
+    db.update(usersTable).set({ tradeCount: (buyer[0]?.tradeCount ?? 0) + 1 }).where(eq(usersTable.id, order.buyerId)),
+    db.update(usersTable).set({ tradeCount: (seller[0]?.tradeCount ?? 0) + 1 }).where(eq(usersTable.id, order.sellerId)),
+  ]);
+
   res.json(await enrichOrder(updated[0]));
 });
 

@@ -1,0 +1,64 @@
+UPDATE PACTSWAP.replit.app - REMOVE PRIVATE_KEY / SERVER WALLET
+
+GOAL: Server should be READ-ONLY. No PRIVATE_KEY needed. No server wallet. Fix "PRIVATE_KEY not configured" error.
+
+=== STEP 1: DELETE FROM REPLIT SECRETS ===
+Delete this secret if it exists:
+Key: PRIVATE_KEY
+
+=== STEP 2: REPLACE BACKEND /server.js WITH THIS ===
+const express = require('express');
+const axios = require('axios');
+const app = express();
+app.use(express.json());
+
+// NO PRIVATE_KEY HERE. SERVER IS READ ONLY
+
+// 1. VERIFY PAYMENT - Check if txHash is real on BSC
+app.post('/api/verify-payment', async (req, res) => {
+  const { txHash, expectedAmount, expectedAddress } = req.body;
+  
+  try {
+    // Call BSCScan API to check transaction
+    const bscScanUrl = `https://api.bscscan.com/api?module=proxy&action=eth_getTransactionReceipt&txhash=${txHash}`;
+    const receipt = await axios.get(bscScanUrl);
+    
+    if(receipt.data.result && receipt.data.result.status === "0x1") {
+      // TX is confirmed
+      // TODO: Update DB order status to "paid"
+      res.json({ success: true, message: "Payment verified" });
+    } else {
+      res.json({ success: false, message: "Transaction not confirmed" });
+    }
+  } catch (error) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// 2. RELEASE ESCROW - This is called AFTER user signs in frontend
+app.post('/api/release-escrow', (req, res) => {
+  const { tradeId, txHash } = req.body;
+  // TODO: Update DB to "completed" after verifying txHash
+  res.json({ success: true, message: "Trade marked as released" });
+});
+
+const PORT = 3000;
+app.listen(PORT, () => console.log(`Server running on ${PORT}`));
+
+=== STEP 3: FRONTEND CHANGE ===
+When user clicks "I Paid":
+1.  Open their wallet and make them send USDT/BNB to seller
+2.  Get the txHash back
+3.  Call POST /api/verify-payment with that txHash
+4.  Show "Payment Pending Confirmation"
+
+When seller clicks "Release Funds":
+1.  Open THEIR wallet and make them call escrow contract releaseFunds()
+2.  Get txHash back
+3.  Call POST /api/release-escrow with that txHash
+
+RULE: Server NEVER signs. Only users sign from their own wallet.
+
+=== STEP 4: TEST ===
+Stop → Run → Try Open Trade again
+Error "PRIVATE_KEY not configured" should be GONE.

@@ -24,10 +24,6 @@ app.listen(port, (err) => {
 
   logger.info({ port }, "PACTSWAP API Server listening");
 
-  // Start background cron jobs (expired escrow processor etc.)
-  if (process.env.PRIVATE_KEY) {
-    startCronJobs();
-  } else {
-    logger.warn("PRIVATE_KEY not set — cron jobs disabled");
-  }
+  // Cron jobs (read-only monitoring only — server never signs)
+  startCronJobs();
 });

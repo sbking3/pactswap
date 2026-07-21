@@ -1,15 +1,8 @@
-import cron from "node-cron";
-import { processExpiredEscrows } from "./contract";
-import { logger } from "./logger";
-
+/**
+ * Cron jobs — server is read-only, so expired escrow processing is handled
+ * by the contract's AUTO_RELEASE_TIME mechanism on-chain, not by a server
+ * wallet. This file is kept as a stub for future read-only monitoring jobs.
+ */
 export function startCronJobs(): void {
-  // Every hour: process expired escrows on-chain
-  cron.schedule("0 * * * *", async () => {
-    logger.info("Cron: running processExpiredEscrows");
-    const txHash = await processExpiredEscrows();
-    if (txHash) {
-      logger.info({ txHash }, "Cron: processExpiredEscrows completed");
-    }
-  });
-  logger.info("Cron jobs started");
+  // No server-side signing jobs. The smart contract handles auto-release.
 }
