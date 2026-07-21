@@ -38,7 +38,18 @@ export default function Marketplace() {
   const [buyDialogOpen, setBuyDialogOpen] = useState(false);
   const [selectedOffer, setSelectedOffer] = useState<any>(null);
   const [buyAmount, setBuyAmount] = useState("");
-  const [isBlockchainPending, setIsBlockchainPending] = useState(false);
+  const [tradeStep, setTradeStep] = useState<
+    "idle" | "approving" | "signing" | "verifying" | "saving"
+  >("idle");
+
+  const tradeStepLabel: Record<typeof tradeStep, string> = {
+    idle:      "Open Trade",
+    approving: "Step 1/3 — Approve USDT…",
+    signing:   "Step 2/3 — Sign Escrow…",
+    verifying: "Step 3/3 — Verifying on-chain…",
+    saving:    "Saving trade…",
+  };
+  const isBlockchainPending = tradeStep !== "idle";
 
   const { user, token } = useAuth();
   const { data, isLoading } = useListOffers();
@@ -65,11 +76,20 @@ export default function Marketplace() {
     const sellerAddress = selectedOffer.seller?.walletAddress;
     if (!sellerAddress) { toast.error("Seller address not found"); return; }
 
-    setIsBlockchainPending(true);
+    setTradeStep("approving");
     try {
       const escrowId = ethers.id(crypto.randomUUID());
-      const txHash = await createEscrow({ escrowId, sellerAddress, amountUsdt: buyAmount });
 
+      // User's wallet signs two transactions (approve + createEscrow).
+      // Server never signs anything — it only reads the on-chain state afterwards.
+      const txHash = await createEscrow({
+        escrowId,
+        sellerAddress,
+        amountUsdt: buyAmount,
+        onStep: (step) => setTradeStep(step),
+      });
+
+      setTradeStep("saving");
       const payload = { email, amount: amountNum, token: "USDT", sellerAddress, txHash, escrowId };
       const res = await fetch("/api/orders", {
         method: "POST",
@@ -86,9 +106,10 @@ export default function Marketplace() {
       setBuyDialogOpen(false);
       setLocation(`/orders/${resData.orderId}`);
     } catch (err: any) {
-      toast.error(err?.data?.error ?? err?.message ?? "Transaction failed");
+      const msg = err?.reason ?? err?.message ?? "Transaction failed or rejected";
+      toast.error(msg.length > 120 ? msg.slice(0, 120) + "…" : msg);
     } finally {
-      setIsBlockchainPending(false);
+      setTradeStep("idle");
     }
   };
 
@@ -393,7 +414,7 @@ export default function Marketplace() {
               disabled={!buyAmount || parseFloat(buyAmount) <= 0 || isBlockchainPending}
             >
               {isBlockchainPending && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
-              {isBlockchainPending ? "Opening Trade…" : "Open Trade"}
+              {tradeStepLabel[tradeStep]}
             </Button>
           </DialogFooter>
         </DialogContent>

@@ -62,25 +62,36 @@ export interface CreateEscrowParams {
   sellerAddress: string;
   /** USDT amount as a human-readable string, e.g. "100" for 100 USDT */
   amountUsdt: string;
+  /** Optional callback fired as each signing step begins, for UI progress updates */
+  onStep?: (step: "approving" | "signing" | "verifying") => void;
 }
 
 /**
- * 1. Approves USDT allowance if needed.
- * 2. Calls createEscrow on the contract.
- * Returns the transaction hash.
+ * 1. Approves USDT allowance if needed (user signs in wallet).
+ * 2. Calls createEscrow on the contract (user signs in wallet).
+ * 3. Waits for on-chain confirmation.
+ *
+ * Server never touches this — user's wallet does ALL signing.
+ * Returns the confirmed transaction hash.
  */
-export async function createEscrow({ escrowId, sellerAddress, amountUsdt }: CreateEscrowParams): Promise<string> {
+export async function createEscrow({ escrowId, sellerAddress, amountUsdt, onStep }: CreateEscrowParams): Promise<string> {
   const signer = await connectWallet();
   // Contract 0xCf9…4061 (verified on BSCScan) uses 6-decimal USDT amounts
   const amountWei = ethers.parseUnits(amountUsdt, 6);
 
-  // Step 1 — approve
+  // Step 1 — ask user to approve USDT spend in their wallet
+  onStep?.("approving");
   await approveUsdt(signer, amountWei);
 
-  // Step 2 — create escrow
+  // Step 2 — ask user to sign the createEscrow transaction
+  onStep?.("signing");
   const contract = new ethers.Contract(CONTRACT_ADDRESS, contractABI, signer);
   const tx = await contract.createEscrow(escrowId, sellerAddress, amountWei);
+
+  // Step 3 — wait for the block to be mined (1 confirmation)
+  onStep?.("verifying");
   await tx.wait();
+
   return tx.hash as string;
 }
 

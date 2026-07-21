@@ -100,23 +100,48 @@ router.post("/orders", requireAuth, async (req, res) => {
     `✓ Converted ${amount} ${tokenUpper} to ${amountInUnits.toString()} units (${decimals} decimals)`,
   );
 
-  // ── 5. Verify txHash on BSC (read-only — server never signs) ─────────────
-  // The frontend wallet already called createEscrow(); we just confirm the tx.
-  const { confirmed: txConfirmed } = await verifyTxHash(txHash);
-  if (!txConfirmed) {
-    logger.warn({ txHash }, "✗ txHash not confirmed on BSC");
-    res.status(400).json({ error: "Transaction not confirmed on BSC. Please wait for confirmation and try again." });
-    return;
-  }
-  logger.info(`✓ txHash confirmed on BSC: ${txHash}`);
-
-  // ── 6. Read escrow data from contract to get the escrowId ─────────────────
-  // The frontend sends escrowId it used when calling createEscrow()
+  // ── 5. Validate escrowId ─────────────────────────────────────────────────
+  // Frontend generates escrowId before calling createEscrow() on-chain.
   const { escrowId } = req.body;
   if (!escrowId || typeof escrowId !== "string") {
-    res.status(400).json({ error: "Missing field: escrowId" });
+    return void fail("Missing field: escrowId");
+  }
+
+  // ── 6. Verify on-chain by reading escrow state (NOT signing anything) ─────
+  // readEscrow reads contract storage — more reliable than verifyTxHash
+  // because BSC RPC nodes can lag by 1-3 blocks after tx.wait() resolves.
+  let onChainEscrow: Awaited<ReturnType<typeof readEscrow>>;
+  try {
+    onChainEscrow = await readEscrow(escrowId);
+  } catch (err: any) {
+    logger.error({ err: err?.message, escrowId }, "✗ readEscrow RPC error");
+    res.status(502).json({ error: "Could not read escrow from BSC. RPC may be busy — please try again." });
     return;
   }
+
+  // Escrow must have a real buyer address (zero address means it was never created)
+  const ZERO = "0x0000000000000000000000000000000000000000";
+  if (!onChainEscrow.buyer || onChainEscrow.buyer.toLowerCase() === ZERO) {
+    logger.warn({ escrowId }, "✗ Escrow not found on-chain");
+    res.status(400).json({ error: "Escrow not found on-chain. Make sure your wallet transaction was confirmed on BSC." });
+    return;
+  }
+
+  // Buyer address must match the authenticated wallet
+  if (onChainEscrow.buyer.toLowerCase() !== walletAddress.toLowerCase()) {
+    logger.warn({ escrowId, buyer: onChainEscrow.buyer, wallet: walletAddress }, "✗ Escrow buyer mismatch");
+    res.status(400).json({ error: "Escrow buyer does not match your wallet." });
+    return;
+  }
+
+  // Seller address must match the offer
+  if (onChainEscrow.seller.toLowerCase() !== sellerAddress.toLowerCase()) {
+    logger.warn({ escrowId }, "✗ Escrow seller mismatch");
+    res.status(400).json({ error: "Escrow seller does not match the selected offer." });
+    return;
+  }
+
+  logger.info(`✓ Escrow verified on-chain — buyer: ${onChainEscrow.buyer}, seller: ${onChainEscrow.seller}`);
 
   // ── 7. Database save ──────────────────────────────────────────────────────
   const sellers = await db
@@ -284,6 +309,62 @@ router.post("/orders/:id/dispute", requireAuth, async (req, res) => {
   await db.update(ordersTable).set({ status: 4, updatedAt: new Date() }).where(eq(ordersTable.id, order.id));
 
   res.status(201).json(dispute[0]);
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// POST /api/verify-trade-opened
+// Called by the frontend AFTER the user's wallet has signed createEscrow().
+// Server is READ-ONLY — it never sends any transaction.
+// Returns { valid: true, escrow } when the on-chain escrow matches the claim.
+// ─────────────────────────────────────────────────────────────────────────────
+router.post("/verify-trade-opened", requireAuth, async (req, res) => {
+  const { escrowId, sellerAddress, amountUsdt } = req.body;
+  const walletAddress = req.user!.address ?? req.user!.walletAddress;
+
+  if (!escrowId || typeof escrowId !== "string") {
+    res.status(400).json({ error: "Missing field: escrowId" });
+    return;
+  }
+  if (!sellerAddress || !ethers.isAddress(sellerAddress)) {
+    res.status(400).json({ error: "Invalid sellerAddress" });
+    return;
+  }
+
+  let escrow: Awaited<ReturnType<typeof readEscrow>>;
+  try {
+    escrow = await readEscrow(escrowId);
+  } catch (err: any) {
+    logger.error({ err: err?.message, escrowId }, "verify-trade-opened: readEscrow RPC error");
+    res.status(502).json({ error: "Could not read escrow from BSC. RPC may be busy — please try again." });
+    return;
+  }
+
+  const ZERO = "0x0000000000000000000000000000000000000000";
+  if (!escrow.buyer || escrow.buyer.toLowerCase() === ZERO) {
+    res.status(400).json({ error: "Escrow not found on-chain. Wallet transaction may not be confirmed yet." });
+    return;
+  }
+  if (escrow.buyer.toLowerCase() !== walletAddress.toLowerCase()) {
+    res.status(400).json({ error: "Escrow buyer does not match your wallet." });
+    return;
+  }
+  if (escrow.seller.toLowerCase() !== sellerAddress.toLowerCase()) {
+    res.status(400).json({ error: "Escrow seller does not match the selected offer." });
+    return;
+  }
+
+  logger.info({ escrowId, buyer: escrow.buyer, seller: escrow.seller }, "✓ verify-trade-opened: escrow confirmed on-chain");
+
+  res.json({
+    valid: true,
+    escrow: {
+      buyer:    escrow.buyer,
+      seller:   escrow.seller,
+      amount:   escrow.amount.toString(),
+      released: escrow.released,
+      refunded: escrow.refunded,
+    },
+  });
 });
 
 export default router;
