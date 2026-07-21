@@ -1,0 +1,1 @@
+- [PactSwap contract addresses](pactswap-contract.md) — v2 deployed; old address must never be used again

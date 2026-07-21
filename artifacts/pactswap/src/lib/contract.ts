@@ -2,7 +2,7 @@ import { ethers } from "ethers";
 import contractABI from "./contractABI.json";
 import { connectWallet } from "./wallet-provider";
 
-export const CONTRACT_ADDRESS = "0xCf9Fd90861085135f8661C29127A1F8F9ccA4061";
+export const CONTRACT_ADDRESS = "0x8aAcD32511ef4902939541b5E9EFb6Ff6cae7AFF";
 export const USDT_ADDRESS = "0x55d398326f99059fF775485246999027B3197955";
 // Re-export so existing callers can import from either location
 export { connectWallet, BSC_CHAIN_ID } from "./wallet-provider";

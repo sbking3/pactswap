@@ -21,8 +21,8 @@ async function main() {
 
   const balance = await ethers.provider.getBalance(deployer.address);
   console.log("BNB balance:", ethers.formatEther(balance), "BNB");
-  if (balance < ethers.parseEther("0.01")) {
-    throw new Error("Insufficient BNB — need at least 0.01 BNB for gas");
+  if (balance < ethers.parseEther("0.005")) {
+    throw new Error("Insufficient BNB — need at least 0.005 BNB for gas");
   }
 
   console.log("\nDeploying PactSwapEscrow v2...");
