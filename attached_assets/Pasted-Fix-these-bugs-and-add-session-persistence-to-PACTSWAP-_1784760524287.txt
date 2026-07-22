@@ -1,0 +1,34 @@
+Fix these bugs and add session persistence to PACTSWAP. Use Next.js, ethers.js, Tailwind, jsonwebtoken.
+
+=== BUG 1: "Escrow already exists" double-click bug ===
+- Add loading state to "Lock USDT in Escrow" button. When clicked: disable button and show "Locking..." until tx completes.
+- After successful lockEscrow() call, immediately call refetchTrade() to update UI to step 2. Do not require page refresh.
+- If API returns error "Escrow already exists", catch it and automatically call refetchTrade() instead of showing error toast.
+
+=== BUG 2: Wrong UI state after trade progresses ===
+- On trade page load, fetch trade.status from backend first.
+- Make UI 100% dynamic based on trade.status:
+    - status = "created": Show "Waiting for seller to lock USDT in escrow"
+    - status = "escrow_locked": Show "1. Buyer sends bank transfer" + "Confirm Payment Sent" button for buyer only
+    - status = "payment_sent": Show "2. Seller releases USDT" + "Release USDT" button for seller only
+    - status = "completed": Show "Already Settled" green badge and hide ALL action buttons
+- Remove all hardcoded step text. Everything must come from trade.status
+
+=== BUG 3 + FEATURE: "Remember Me" Session for Mobile + Desktop ===
+- AUTH FLOW: After connectWallet() succeeds, call POST /api/auth/login with { walletAddress, signature }
+- Backend: Verify signature, generate JWT with 7 day expiry. Return { token, walletAddress }
+- Frontend: Save to localStorage as 'pactswap_session' = JSON.stringify({token, walletAddress, expiry})
+- On every page load in _app.js or main layout: useEffect(() => { autoConnectWallet() }, [])
+  autoConnectWallet() should: check localStorage, verify token not expired, if valid skip "Connect Wallet" button and set user state
+- API PROTECTION: Add middleware to verify JWT on all /api/* routes. If invalid/expired, return 401 and frontend should clear localStorage
+- HEADER: When logged in, show truncated wallet address 0x123...abc + "Disconnect" button. 
+  On "Disconnect" click: clear localStorage + call POST /api/auth/logout + reset state
+- MOBILE COMPATIBILITY: Must work in MetaMask in-app browser, Trust Wallet browser, and normal Chrome/Android. Use localStorage only, not cookies.
+
+=== GENERAL RULES ===
+1. Don't break desktop flow
+2. Use Tailwind for loading spinners and disabled button states
+3. Add proper error handling and toast notifications
+4. Test auto-reconnect on page refresh
+
+Deploy and make sure all 3 bugs are fixed.

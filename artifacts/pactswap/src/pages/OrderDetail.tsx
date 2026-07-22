@@ -227,6 +227,13 @@ export default function OrderDetail() {
       refetch();
     } catch (err: any) {
       const msg = err?.reason ?? err?.message ?? "Lock failed — please try again.";
+      // Double-click or retry after partial success → escrow is already recorded.
+      // Don't error — just refresh so the UI advances to the next step.
+      if (msg.toLowerCase().includes("already locked") || msg.toLowerCase().includes("already exists")) {
+        toast.info("Escrow already locked — refreshing…");
+        refetch();
+        return;
+      }
       setLockError(msg);
       toast.error(msg);
     } finally {
@@ -575,6 +582,32 @@ export default function OrderDetail() {
                 >
                   <FileWarning className="w-4 h-4 mr-2" /> Cancel Trade / Open Dispute
                 </Button>
+              )}
+
+              {/* ── COMPLETED ── */}
+              {order.status === 2 && (
+                <div className="p-4 bg-green-500/10 border border-green-500/30 rounded-xl text-center space-y-1.5">
+                  <CheckCircle2 className="w-5 h-5 text-green-400 mx-auto" />
+                  <p className="text-sm font-bold text-green-400">Already Settled</p>
+                  <p className="text-xs text-muted-foreground">This trade is complete. USDT has been released to the buyer.</p>
+                </div>
+              )}
+
+              {/* ── CANCELLED ── */}
+              {order.status === 3 && (
+                <div className="p-4 bg-muted/10 border border-border rounded-xl text-center space-y-1.5">
+                  <p className="text-sm font-bold text-muted-foreground">Trade Cancelled</p>
+                  <p className="text-xs text-muted-foreground">This order was cancelled before completion.</p>
+                </div>
+              )}
+
+              {/* ── DISPUTED ── */}
+              {order.status === 4 && (
+                <div className="p-4 bg-red-500/10 border border-red-500/30 rounded-xl text-center space-y-1.5">
+                  <AlertCircle className="w-5 h-5 text-red-400 mx-auto" />
+                  <p className="text-sm font-bold text-red-400">Under Dispute</p>
+                  <p className="text-xs text-muted-foreground">An admin is reviewing this trade. You will be notified of the outcome.</p>
+                </div>
               )}
             </div>
           </div>
