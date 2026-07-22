@@ -205,7 +205,7 @@ export default function Profile() {
               <CardTitle className="text-lg text-white flex items-center gap-2">
                 <Building className="w-5 h-5 text-primary" /> Bank Details
               </CardTitle>
-              <CardDescription>Your bank details are shared only with users buying USDT from you.</CardDescription>
+              <CardDescription>Your bank details are only shown to buyers after a trade starts.</CardDescription>
             </CardHeader>
             <form onSubmit={handleUpdateBank}>
               <CardContent className="pt-6 space-y-4">
@@ -223,11 +223,14 @@ export default function Profile() {
                   <div className="space-y-2">
                     <Label htmlFor="accountNumber">Account Number</Label>
                     <Input 
-                      id="accountNumber" 
+                      id="accountNumber"
+                      type="tel"
+                      inputMode="numeric"
+                      maxLength={16}
                       value={accountNumber} 
-                      onChange={e => setAccountNumber(e.target.value)} 
-                      placeholder="10 digit account number"
-                      className="bg-background border-border"
+                      onChange={e => setAccountNumber(e.target.value.replace(/\D/g, "").slice(0, 16))} 
+                      placeholder="0123456789"
+                      className="bg-background border-border font-mono tracking-widest"
                     />
                   </div>
                   <div className="space-y-2 md:col-span-2">

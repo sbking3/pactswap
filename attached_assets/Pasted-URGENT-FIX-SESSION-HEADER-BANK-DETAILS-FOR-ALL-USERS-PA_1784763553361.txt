@@ -1,0 +1,57 @@
+URGENT: FIX SESSION + HEADER + BANK DETAILS FOR ALL USERS - PACTSWAP
+
+FIX 3 CRITICAL BUGS IN ONE GO:
+
+=== BUG 1: LOGIN SESSION DOESN'T PERSIST ===
+PROBLEM: After login, if I refresh the page it shows "Welcome Back" login screen again. It should stay logged in.
+
+=== BUG 2: HEADER SHOWS WALLET ADDRESS ===
+PROBLEM: In the header, it's showing the wallet address like 0x1234... instead of Username.
+
+=== BUG 3: BANK ACCOUNT NUMBER IS GARBLED ===
+PROBLEM: Account Number is saving and displaying as encrypted/garbled text like "U2FsdGVkX1+/libczag8eyxWXfnz4Oa1Yt" for ALL users instead of actual numbers.
+
+=== REQUIREMENTS TO FIX ALL 3 ===
+
+1.  SESSION PERSISTENCE
+    - After successful wallet login, save `walletAddress` and `username` to localStorage
+    - Key: `pactswap_user` Value: JSON.stringify({address, username})
+    - On page load/app start, check localStorage. If data exists, auto-login and redirect to /dashboard
+    - Do NOT show the /login page if user is already logged in
+    - Use React Context to manage user state globally
+
+2.  HEADER UPDATE
+    - In the top right header, replace wallet address with `Username`
+    - Add dropdown: Username ▼ 
+    - Dropdown options: Dashboard, My Orders, Profile, Logout
+    - "Logout" button should clear localStorage and disconnect wallet
+
+3.  ROUTE PROTECTION
+    - Create middleware: If user is logged in and tries to go to /login, redirect them to /dashboard
+    - If user is NOT logged in and tries to go to /dashboard, redirect to /login
+
+4.  DATABASE - BANK DETAILS
+    - In the users table, column `accountNumber` must be type VARCHAR/TEXT
+    - Do NOT encrypt. Save exactly what user types.
+
+5.  SAVE API: /api/user/bank-details [POST]
+    - Accept: { bankName, accountName, accountNumber }
+    - Save accountNumber as plain text. Example: "0123456789"
+    - Remove any encryption, base64, or JSON.stringify on accountNumber
+
+6.  GET API: /api/user/bank-details [GET]
+    - Return accountNumber exactly as saved from DB
+    - No decoding needed
+
+7.  FRONTEND: /profile
+    - Account Number input: type="tel" inputMode="numeric" maxLength="16" placeholder="0123456789"
+    - Display value exactly from DB
+    - Add helper text under Bank Details: "Your bank details are only shown to buyers after a trade starts"
+
+8.  MIGRATION
+    - For users who already have gibberish saved in accountNumber, set that field to NULL so they can re-enter.
+
+=== TEST AFTER FIX ===
+1. Login → Refresh → Should stay on /dashboard
+2. Header should show "Username ▼" not wallet address
+3. Add Bank Details → Save → Refresh → Account Number must show exact numbers typed

@@ -4,7 +4,7 @@ import { useGetMe, User } from '@workspace/api-client-react';
 interface AuthContextType {
   user: User | null;
   token: string | null;
-  login: (token: string, address: string) => void;
+  login: (token: string, address: string, username?: string) => void;
   logout: () => void;
   isLoading: boolean;
 }
@@ -36,6 +36,7 @@ function isTokenExpired(token: string): boolean {
 function clearStoredSession() {
   localStorage.removeItem('pactswap_token');
   localStorage.removeItem('pactswap_wallet');
+  localStorage.removeItem('pactswap_user');
 }
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
@@ -56,7 +57,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     query: {
       queryKey: ['me', token],
       enabled: !!token,
-      retry: false,
+      retry: 1, // one retry on transient network errors (server cold-start, etc.)
+      staleTime: 60_000, // treat user data as fresh for 60 s to avoid re-fetching on every render
     }
   });
 
@@ -72,9 +74,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   }, [meError]);
 
-  const login = (newToken: string, newAddress: string) => {
+  const login = (newToken: string, newAddress: string, username?: string) => {
     localStorage.setItem('pactswap_token', newToken);
     localStorage.setItem('pactswap_wallet', newAddress);
+    // pactswap_user is a lightweight "session marker" read by the Login page
+    // to redirect already-authenticated users straight to /dashboard.
+    if (username) {
+      localStorage.setItem('pactswap_user', JSON.stringify({ address: newAddress, username }));
+    }
     setToken(newToken);
     setAddress(newAddress);
   };

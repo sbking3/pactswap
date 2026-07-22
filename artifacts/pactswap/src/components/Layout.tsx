@@ -53,11 +53,9 @@ export function Layout({ children }: { children: React.ReactNode }) {
                       <div className="w-6 h-6 rounded-full bg-primary/20 flex items-center justify-center text-primary font-bold text-xs">
                         {user.name?.charAt(0).toUpperCase() || 'U'}
                       </div>
-                      {/* Show truncated wallet address when available, fall back to name */}
-                      <span className="hidden sm:inline-block font-mono text-xs">
-                        {user.walletAddress
-                          ? `${user.walletAddress.slice(0, 6)}…${user.walletAddress.slice(-4)}`
-                          : user.name}
+                      {/* Show username; fall back to truncated wallet address */}
+                      <span className="hidden sm:inline-block text-sm font-medium max-w-[120px] truncate">
+                        {user.name || `${user.walletAddress.slice(0, 6)}…${user.walletAddress.slice(-4)}`}
                       </span>
                     </Button>
                   </DropdownMenuTrigger>

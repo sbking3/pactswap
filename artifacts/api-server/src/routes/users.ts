@@ -3,7 +3,7 @@ import { db } from "@workspace/db";
 import { usersTable, ordersTable } from "@workspace/db";
 import { eq, or, and, sql } from "drizzle-orm";
 import { requireAuth } from "../middlewares/authMiddleware";
-import { encrypt, decrypt } from "../lib/encryption";
+// Encryption removed — accountNumber is stored as plain text
 
 const router = Router();
 
@@ -36,10 +36,9 @@ router.patch("/users/bank", requireAuth, async (req, res) => {
     return;
   }
 
-  const encryptedAccount = encrypt(accountNumber);
-
+  // Save plain text — no encryption
   await db.update(usersTable)
-    .set({ bankName, accountNumber: encryptedAccount, accountName })
+    .set({ bankName, accountNumber, accountName })
     .where(eq(usersTable.id, req.user!.userId));
 
   res.json({ message: "Bank details updated securely" });

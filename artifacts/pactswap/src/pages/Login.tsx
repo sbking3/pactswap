@@ -35,7 +35,14 @@ function getLocalProfile(address: string): { name: string; email: string } | nul
 
 export default function Login() {
   const [, setLocation] = useLocation();
-  const { login, logout } = useAuth();
+  const { login, logout, token, user, isLoading } = useAuth();
+
+  // Redirect already-authenticated users straight to /dashboard
+  useEffect(() => {
+    if (!isLoading && token && user) {
+      setLocation("/dashboard");
+    }
+  }, [isLoading, token, user, setLocation]);
 
   const [isConnecting, setIsConnecting] = useState(false);
   const [connectedAddress, setConnectedAddress] = useState<string | null>(null);
@@ -96,9 +103,8 @@ export default function Login() {
             setPendingPayload(payload);
             setRequires2FA(true);
           } else {
-            login(data.token, data.user.walletAddress);
-            const profile = getLocalProfile(payload.address);
-            toast.success(profile ? `Welcome back, ${profile.name}! 👋` : "Logged in successfully");
+            login(data.token, data.user.walletAddress, data.user.name);
+            toast.success(`Welcome back, ${data.user.name}! 👋`);
             setLocation("/dashboard");
           }
         },
@@ -176,7 +182,7 @@ export default function Login() {
     setShowCreateAccount(false);
     setPendingAddress(null);
     setPendingPayload(null);
-    login(token, walletAddress);
+    login(token, walletAddress, name);
     toast.success(`Welcome to PACTSWAP, ${name}! 🎉`);
     setLocation("/dashboard");
   };
@@ -208,9 +214,8 @@ export default function Login() {
       { data: { walletAddress: pendingPayload.address, message: pendingPayload.message, signature: pendingPayload.signature, totpCode } },
       {
         onSuccess: (data) => {
-          login(data.token, data.user.walletAddress);
-          const profile = getLocalProfile(pendingPayload.address);
-          toast.success(profile ? `Welcome back, ${profile.name}! 👋` : "Logged in successfully");
+          login(data.token, data.user.walletAddress, data.user.name);
+          toast.success(`Welcome back, ${data.user.name}! 👋`);
           setLocation("/dashboard");
         },
         onError: (error) => {
