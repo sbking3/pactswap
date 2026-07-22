@@ -43,6 +43,16 @@ export default function CreateOffer() {
       return;
     }
 
+    if (payload.amountUsdt < 1 || payload.amountUsdt > 10000) {
+      toast.error("Total amount must be between 1 and 10,000 USDT.");
+      return;
+    }
+
+    if (payload.minTrade < 1) {
+      toast.error("Minimum trade must be at least 1 USDT.");
+      return;
+    }
+
     if (payload.minTrade > payload.maxTrade) {
       toast.error("Min trade cannot be greater than max trade.");
       return;
@@ -50,6 +60,11 @@ export default function CreateOffer() {
 
     if (payload.maxTrade > payload.amountUsdt) {
       toast.error("Max trade cannot exceed total amount.");
+      return;
+    }
+
+    if (payload.maxTrade > 10000) {
+      toast.error("Max trade cannot exceed 10,000 USDT.");
       return;
     }
 

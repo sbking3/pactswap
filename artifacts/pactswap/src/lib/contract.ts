@@ -4,6 +4,8 @@ import { connectWallet } from "./wallet-provider";
 
 export const CONTRACT_ADDRESS = "0x3FE1bAbd4aC5bB5107767d913e6d4A2b63D4385d";
 export const USDT_ADDRESS = "0x55d398326f99059fF775485246999027B3197955";
+/** USDT uses 6 decimals on BSC. 1 USDT = 1_000_000 units. Never use 18 for USDT. */
+export const USDT_DECIMALS = 6;
 // Re-export so existing callers can import from either location
 export { connectWallet, BSC_CHAIN_ID } from "./wallet-provider";
 
@@ -28,12 +30,15 @@ async function getWriteContract() {
 
 // ─── USDT helpers ────────────────────────────────────────────────────────────
 
+/**
+ * Returns the human-readable USDT balance as a string (e.g. "50.00").
+ * Always uses USDT_DECIMALS (6) — never 18.
+ */
 export async function getUsdtBalance(address: string): Promise<string> {
   const provider = new ethers.JsonRpcProvider("https://bsc-dataseed1.binance.org/");
   const usdt = new ethers.Contract(USDT_ADDRESS, USDT_ABI, provider);
-  const decimals: number = await usdt.decimals();
   const raw: bigint = await usdt.balanceOf(address);
-  return ethers.formatUnits(raw, decimals);
+  return parseFloat(ethers.formatUnits(raw, USDT_DECIMALS)).toFixed(2);
 }
 
 /**
@@ -65,7 +70,7 @@ async function approveUsdt(signer: ethers.JsonRpcSigner, amountWei: bigint): Pro
  */
 export async function approveUsdtForEscrow(amountUsdt: string): Promise<void> {
   const signer = await connectWallet();
-  const amountWei = ethers.parseUnits(amountUsdt, 6);
+  const amountWei = ethers.parseUnits(amountUsdt, USDT_DECIMALS);
   await approveUsdt(signer, amountWei);
 }
 
@@ -86,7 +91,7 @@ export async function openEscrowOnChain({
   amountUsdt: string;
 }): Promise<string> {
   const signer = await connectWallet();
-  const amountWei = ethers.parseUnits(amountUsdt, 6);
+  const amountWei = ethers.parseUnits(amountUsdt, USDT_DECIMALS);
   const contract = new ethers.Contract(CONTRACT_ADDRESS, contractABI, signer);
   const tx = await contract.createEscrow(escrowId, sellerAddress, amountWei);
   await tx.wait();
@@ -106,7 +111,7 @@ export interface CreateEscrowParams {
 
 export async function createEscrow({ escrowId, sellerAddress, amountUsdt, onStep }: CreateEscrowParams): Promise<string> {
   const signer = await connectWallet();
-  const amountWei = ethers.parseUnits(amountUsdt, 6);
+  const amountWei = ethers.parseUnits(amountUsdt, USDT_DECIMALS);
   onStep?.("approving");
   await approveUsdt(signer, amountWei);
   onStep?.("signing");
@@ -135,7 +140,7 @@ export async function lockEscrowBySeller({
   onStep?: (step: "approving" | "locking") => void;
 }): Promise<string> {
   const signer = await connectWallet();
-  const amountWei = ethers.parseUnits(amountUsdt, 6);
+  const amountWei = ethers.parseUnits(amountUsdt, USDT_DECIMALS);
 
   onStep?.("approving");
   await approveUsdt(signer, amountWei);

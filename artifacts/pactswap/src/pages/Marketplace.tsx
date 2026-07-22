@@ -19,7 +19,8 @@ import { approveUsdtForEscrow, openEscrowOnChain, CONTRACT_ADDRESS } from "@/lib
 import { useWallet } from "@/hooks/useWallet";
 import { WalletGuideModal } from "@/components/WalletGuideModal";
 
-const MAX_TEST_USDT = 1;
+const USDT_MIN = 1;
+const USDT_MAX = 10000;
 
 // ── Phase types ───────────────────────────────────────────────────────────────
 type DialogPhase =
@@ -124,12 +125,13 @@ export default function Marketplace() {
   // ── Validate amount fields ────────────────────────────────────────────────────
   function validateAmount(amountNum: number): boolean {
     if (!buyAmount || isNaN(amountNum)) { toast.error("Please enter a valid amount"); return false; }
-    if (amountNum > MAX_TEST_USDT) { toast.error(`Test cap is ${MAX_TEST_USDT} USDT`); return false; }
+    if (amountNum < USDT_MIN) { toast.error(`Minimum trade is ${USDT_MIN} USDT`); return false; }
+    if (amountNum > USDT_MAX) { toast.error(`Maximum trade is ${USDT_MAX.toLocaleString()} USDT`); return false; }
     if (amountNum < selectedOffer.minTrade || amountNum > selectedOffer.maxTrade) {
       toast.error(`Amount must be ${selectedOffer.minTrade}–${selectedOffer.maxTrade} USDT`); return false;
     }
     if (amountNum > selectedOffer.amountUsdt) {
-      toast.error(`Only ${selectedOffer.amountUsdt} USDT available`); return false;
+      toast.error(`Only ${parseFloat(selectedOffer.amountUsdt).toFixed(2)} USDT available`); return false;
     }
     return true;
   }
@@ -401,8 +403,8 @@ export default function Marketplace() {
                         <span className="text-xs text-muted-foreground block">per USDT</span>
                       </td>
                       <td className="px-6 py-4">
-                        <div className="text-sm text-white font-medium">{offer.minTrade} – {offer.maxTrade} USDT</div>
-                        <div className="text-xs text-muted-foreground mt-0.5">{offer.amountUsdt} USDT available</div>
+                        <div className="text-sm text-white font-medium">{parseFloat(offer.minTrade).toFixed(2)} – {parseFloat(offer.maxTrade).toFixed(2)} USDT</div>
+                        <div className="text-xs text-muted-foreground mt-0.5">{parseFloat(offer.amountUsdt).toFixed(2)} USDT available</div>
                       </td>
                       <td className="px-6 py-4">
                         <Badge className="bg-muted/40 text-white border-border text-xs font-normal">
@@ -444,8 +446,8 @@ export default function Marketplace() {
                     <span className="text-lg font-black text-primary">₦{offer.priceNaira.toLocaleString()}</span>
                   </div>
                   <div className="flex justify-between text-xs text-muted-foreground mb-3">
-                    <span>Limit: {offer.minTrade}–{offer.maxTrade} USDT</span>
-                    <span>Available: {offer.amountUsdt} USDT</span>
+                    <span>Limit: {parseFloat(offer.minTrade).toFixed(2)}–{parseFloat(offer.maxTrade).toFixed(2)} USDT</span>
+                    <span>Available: {parseFloat(offer.amountUsdt).toFixed(2)} USDT</span>
                   </div>
                   <Button
                     onClick={() => handleBuyClick(offer)}
@@ -523,18 +525,18 @@ export default function Marketplace() {
                       value={buyAmount}
                       onChange={(e) => {
                         const v = parseFloat(e.target.value);
-                        setBuyAmount(!isNaN(v) && v > MAX_TEST_USDT ? MAX_TEST_USDT.toString() : e.target.value);
+                        setBuyAmount(!isNaN(v) && v > USDT_MAX ? USDT_MAX.toString() : e.target.value);
                       }}
                       placeholder="0.00"
-                      min={0}
-                      max={MAX_TEST_USDT}
+                      min={USDT_MIN}
+                      max={USDT_MAX}
                       className="pr-20 bg-background border-border text-lg h-12 font-bold"
                     />
                     <div className="absolute inset-y-0 right-0 flex items-center pr-3 gap-1">
                       <button
                         className="text-[11px] text-primary border border-primary/30 rounded px-1 hover:bg-primary/10"
                         onClick={() => setBuyAmount(
-                          Math.min(selectedOffer.maxTrade, selectedOffer.amountUsdt, MAX_TEST_USDT).toString()
+                          Math.min(selectedOffer.maxTrade, selectedOffer.amountUsdt, USDT_MAX).toString()
                         )}
                       >
                         Max
@@ -542,7 +544,7 @@ export default function Marketplace() {
                       <span className="text-primary font-bold text-sm">USDT</span>
                     </div>
                   </div>
-                  <p className="text-xs text-amber-400">⚠ Test cap: {MAX_TEST_USDT} USDT</p>
+                  <p className="text-xs text-muted-foreground">Min: {USDT_MIN} USDT · Max: {USDT_MAX.toLocaleString()} USDT</p>
                 </div>
                 <div className="flex justify-center">
                   <ArrowDownUp className="w-4 h-4 text-muted-foreground" />

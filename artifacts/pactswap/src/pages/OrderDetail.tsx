@@ -114,7 +114,7 @@ function ChatFeed({ order, isBuyer }: { order: any; isBuyer: boolean }) {
     ...(escrowLocked
       ? isBuyer
         ? [
-            { from: "system", text: `Transfer ₦${(order.priceNaira * order.amountUsdt).toLocaleString()} to the seller's bank account shown on the left.` },
+            { from: "system", text: `Transfer ₦${(order.priceNaira * Number(order.amountUsdt)).toLocaleString()} to the seller's bank account shown on the left.` },
             { from: "system", text: 'After payment, tap "I Have Paid". The seller will verify and release your USDT.' },
           ]
         : [
@@ -352,7 +352,7 @@ export default function OrderDetail() {
               <div className="grid grid-cols-3 gap-4">
                 <div>
                   <span className="text-xs text-muted-foreground block mb-1">Amount</span>
-                  <span className="text-2xl font-black text-white">{order.amountUsdt}</span>
+                  <span className="text-2xl font-black text-white">{Number(order.amountUsdt).toFixed(2)}</span>
                   <span className="text-sm text-primary ml-1">USDT</span>
                 </div>
                 <div>
@@ -493,7 +493,7 @@ export default function OrderDetail() {
                     {lockLoading && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
                     {lockLoading
                       ? lockStep === "approving" ? "Approving USDT…" : "Locking in Escrow…"
-                      : `Lock ${order.amountUsdt} USDT in Escrow`}
+                      : `Lock ${Number(order.amountUsdt).toFixed(2)} USDT in Escrow`}
                   </Button>
 
                   {/* Show TX hash as soon as it lands */}
