@@ -69,7 +69,7 @@ router.get("/admin/stats", requireAdmin, async (req, res) => {
 
 // ─── MARKETPLACE ──────────────────────────────────────────────────────────────
 
-// POST /api/admin/offers/clear  — soft-delete all active offers with no live trades
+// POST /api/admin/offers/clear  — force soft-delete ALL active offers, no checks
 router.post("/admin/offers/clear", requireAdmin, async (req, res) => {
   const activeOffers = await db.select().from(offersTable).where(eq(offersTable.isActive, true));
 
@@ -80,37 +80,21 @@ router.post("/admin/offers/clear", requireAdmin, async (req, res) => {
 
   const offerIds = activeOffers.map(o => o.id);
 
-  // Find which offer IDs have live orders (status 0 or 1)
-  const liveOrderStatuses = await db
-    .select({ offerId: ordersTable.offerId, status: ordersTable.status })
-    .from(ordersTable)
-    .where(inArray(ordersTable.offerId, offerIds));
+  await db
+    .update(offersTable)
+    .set({ isActive: false, updatedAt: new Date() })
+    .where(inArray(offersTable.id, offerIds));
 
-  const protectedOfferIds = new Set(
-    liveOrderStatuses.filter(o => o.status === 0 || o.status === 1).map(o => o.offerId).filter(Boolean) as string[],
-  );
-
-  const toDelete = activeOffers.filter(o => !protectedOfferIds.has(o.id));
-  const skipped = activeOffers.length - toDelete.length;
-
-  if (toDelete.length > 0) {
-    await db
-      .update(offersTable)
-      .set({ isActive: false, updatedAt: new Date() })
-      .where(inArray(offersTable.id, toDelete.map(o => o.id)));
-  }
-
-  await logAction("CLEAR_MARKETPLACE", adminWallet(req), undefined, {
-    deleted: toDelete.length,
-    skipped,
+  await logAction("FORCE_CLEAR_ALL", adminWallet(req), undefined, {
+    deleted: activeOffers.length,
   });
 
-  logger.info(`ADMIN CLEAR: deleted ${toDelete.length}, skipped ${skipped}`);
+  logger.info(`ADMIN FORCE CLEAR: deleted ${activeOffers.length}`);
 
   res.json({
-    deleted: toDelete.length,
-    skipped,
-    message: `${toDelete.length} offer${toDelete.length !== 1 ? "s" : ""} cleared. ${skipped} skipped due to active trades.`,
+    deleted: activeOffers.length,
+    skipped: 0,
+    message: `Force deleted ${activeOffers.length} offer${activeOffers.length !== 1 ? "s" : ""}.`,
   });
 });
 
