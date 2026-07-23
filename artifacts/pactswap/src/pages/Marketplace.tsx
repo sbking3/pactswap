@@ -40,20 +40,6 @@ function MerchantAvatar({ name }: { name?: string }) {
   );
 }
 
-function kycLabel(level: number) {
-  if (level >= 3) return (
-    <span className="text-[10px] text-primary font-medium flex items-center gap-0.5">
-      <ShieldCheck className="w-3 h-3" /> Verified
-    </span>
-  );
-  if (level === 2) return (
-    <span className="text-[10px] text-slate-400 font-medium flex items-center gap-0.5">
-      <ShieldCheck className="w-3 h-3" /> KYC2
-    </span>
-  );
-  return null;
-}
-
 // ── Step indicator inside dialog ──────────────────────────────────────────────
 function DialogStep({
   n, label, state,
@@ -393,7 +379,6 @@ export default function Marketplace() {
                               <span className="text-xs text-muted-foreground">
                                 {offer.seller?.tradeCount ?? 0} orders
                               </span>
-                              {kycLabel(offer.seller?.kycLevel ?? 0)}
                             </div>
                           </div>
                         </div>

@@ -2,7 +2,7 @@ import { useRoute } from "wouter";
 import { useGetUserProfile, getGetUserProfileQueryKey } from "@workspace/api-client-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Loader2, Star, ShieldCheck, Calendar, Activity } from "lucide-react";
+import { Loader2, Star, Calendar, Activity } from "lucide-react";
 import { format } from "date-fns";
 
 export default function UserProfile() {
@@ -33,15 +33,6 @@ export default function UserProfile() {
     );
   }
 
-  const kycBadge = (level: number) => {
-    switch(level) {
-      case 3: return <Badge variant="outline" className="bg-primary/10 text-primary border-primary/20"><ShieldCheck className="w-3 h-3 mr-1"/> Fully Verified</Badge>;
-      case 2: return <Badge variant="outline" className="bg-slate-300/10 text-slate-300 border-slate-300/20"><ShieldCheck className="w-3 h-3 mr-1"/> Verified</Badge>;
-      case 1: return <Badge variant="outline" className="bg-amber-700/10 text-amber-700 border-amber-700/20"><ShieldCheck className="w-3 h-3 mr-1"/> Basic</Badge>;
-      default: return <Badge variant="outline" className="bg-muted text-muted-foreground border-border">Unverified</Badge>;
-    }
-  };
-
   return (
     <div className="container mx-auto px-4 py-12 max-w-3xl">
       <Card className="bg-card border-border shadow-xl overflow-hidden relative">
@@ -54,7 +45,6 @@ export default function UserProfile() {
             <div className="flex-1 text-center sm:text-left">
               <h1 className="text-3xl font-bold text-white mb-1 flex items-center justify-center sm:justify-start gap-3">
                 {profile.name}
-                {kycBadge(profile.kycLevel)}
               </h1>
               <p className="text-muted-foreground font-mono text-sm">{profile.walletAddress}</p>
             </div>

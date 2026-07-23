@@ -17,7 +17,6 @@ import CreateOffer from '@/pages/CreateOffer';
 import Orders from '@/pages/Orders';
 import OrderDetail from '@/pages/OrderDetail';
 import Profile from '@/pages/Profile';
-import KYC from '@/pages/KYC';
 import SecuritySettings from '@/pages/SecuritySettings';
 import UserProfile from '@/pages/UserProfile';
 import MyOffers from '@/pages/MyOffers';
@@ -81,12 +80,6 @@ function Router() {
           </ProtectedRoute>
         </Route>
 
-        <Route path="/kyc">
-          <ProtectedRoute>
-            <KYC />
-          </ProtectedRoute>
-        </Route>
-        
         <Route path="/settings/security">
           <ProtectedRoute>
             <SecuritySettings />

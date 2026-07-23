@@ -120,10 +120,6 @@ export default function Profile() {
             </CardHeader>
             <CardContent className="pt-4 space-y-4">
               <div className="flex justify-between items-center">
-                <span className="text-sm text-muted-foreground">KYC Level</span>
-                <span className="font-bold text-white">{user.kycLevel}</span>
-              </div>
-              <div className="flex justify-between items-center">
                 <span className="text-sm text-muted-foreground">Email Status</span>
                 <span className="text-green-500 text-sm font-medium">Verified</span>
               </div>

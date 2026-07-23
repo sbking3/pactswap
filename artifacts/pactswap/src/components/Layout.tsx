@@ -2,7 +2,7 @@ import { Link, useLocation } from "wouter";
 import { useAuth } from "@/contexts/AuthContext";
 import PactSwapLogo from "@/components/PactSwapLogo";
 import SecurityBanner from "@/components/SecurityBanner";
-import { Menu, User as UserIcon, LogOut, Wallet, Shield, Activity, Settings, Plus, List, Home, ShoppingCart } from "lucide-react";
+import { Menu, User as UserIcon, LogOut, Activity, Settings, Plus, List, ShoppingCart } from "lucide-react";
 import { 
   DropdownMenu, 
   DropdownMenuContent, 
@@ -75,12 +75,6 @@ export function Layout({ children }: { children: React.ReactNode }) {
                       <Link href="/profile" className="w-full flex items-center cursor-pointer">
                         <UserIcon className="mr-2 h-4 w-4" />
                         <span>Profile</span>
-                      </Link>
-                    </DropdownMenuItem>
-                    <DropdownMenuItem asChild>
-                      <Link href="/kyc" className="w-full flex items-center cursor-pointer">
-                        <Shield className="mr-2 h-4 w-4" />
-                        <span>KYC Verification</span>
                       </Link>
                     </DropdownMenuItem>
                     <DropdownMenuItem asChild>

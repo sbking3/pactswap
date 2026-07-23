@@ -114,7 +114,7 @@ export default function Home() {
               </div>
               <h3 className="text-xl font-bold text-white mb-3">Verified Traders</h3>
               <p className="text-muted-foreground leading-relaxed">
-                Strict KYC requirements and a transparent reputation system ensure you only deal with serious, verified counterparties.
+                A transparent reputation system and escrow protection ensure you only deal with serious, trusted counterparties.
               </p>
             </div>
           </div>

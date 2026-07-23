@@ -19,15 +19,8 @@ export default function CreateOffer() {
   const [minTrade, setMinTrade] = useState("");
   const [maxTrade, setMaxTrade] = useState("");
 
-  const isKycRestricted = user?.kycLevel === 0;
-
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    
-    if (isKycRestricted) {
-      toast.error("You must complete KYC Level 1 to create offers.");
-      return;
-    }
 
     const payload = {
       escrowId: `escrow_${Date.now()}`, // Simulated escrow creation
@@ -97,19 +90,6 @@ export default function CreateOffer() {
         <p className="text-muted-foreground mt-1">Lock your USDT in PACTSWAP Escrow to sell for Naira.</p>
       </div>
 
-      {isKycRestricted && (
-        <div className="bg-amber-500/10 border border-amber-500/30 rounded-lg p-4 mb-8 flex gap-3 items-start">
-          <AlertTriangle className="w-5 h-5 text-amber-500 flex-shrink-0 mt-0.5" />
-          <div>
-            <h4 className="text-amber-500 font-medium mb-1">KYC Required</h4>
-            <p className="text-sm text-amber-500/80 mb-3">You need to complete at least KYC Level 1 to create sell offers on the marketplace.</p>
-            <Button size="sm" asChild className="bg-amber-500 text-black hover:bg-amber-600 font-medium">
-              <Link href="/kyc">Complete KYC Now</Link>
-            </Button>
-          </div>
-        </div>
-      )}
-
       <Card className="bg-card border-border shadow-lg">
         <form onSubmit={handleSubmit}>
           <CardContent className="pt-6 space-y-6">
@@ -135,7 +115,6 @@ export default function CreateOffer() {
                       value={priceNaira}
                       onChange={e => setPriceNaira(e.target.value)}
                       className="bg-background border-border pl-8"
-                      disabled={isKycRestricted}
                     />
                     <div className="absolute inset-y-0 left-0 flex items-center pl-3 pointer-events-none text-muted-foreground">₦</div>
                   </div>
@@ -151,7 +130,6 @@ export default function CreateOffer() {
                       value={amountUsdt}
                       onChange={e => setAmountUsdt(e.target.value)}
                       className="bg-background border-border pr-16"
-                      disabled={isKycRestricted}
                     />
                     <div className="absolute inset-y-0 right-0 flex items-center pr-3 pointer-events-none">
                       <span className="text-primary font-bold text-sm">USDT</span>
@@ -176,7 +154,6 @@ export default function CreateOffer() {
                       value={minTrade}
                       onChange={e => setMinTrade(e.target.value)}
                       className="bg-background border-border pr-16"
-                      disabled={isKycRestricted}
                     />
                     <div className="absolute inset-y-0 right-0 flex items-center pr-3 pointer-events-none">
                       <span className="text-muted-foreground text-sm">USDT</span>
@@ -194,7 +171,6 @@ export default function CreateOffer() {
                       value={maxTrade}
                       onChange={e => setMaxTrade(e.target.value)}
                       className="bg-background border-border pr-16"
-                      disabled={isKycRestricted}
                     />
                     <div className="absolute inset-y-0 right-0 flex items-center pr-3 pointer-events-none">
                       <span className="text-muted-foreground text-sm">USDT</span>
@@ -231,7 +207,7 @@ export default function CreateOffer() {
             <Button 
               type="submit" 
               className="w-full bg-primary text-primary-foreground hover:bg-primary/90 font-bold h-12"
-              disabled={isKycRestricted || createOfferMutation.isPending || !user?.bankName}
+              disabled={createOfferMutation.isPending || !user?.bankName}
             >
               {createOfferMutation.isPending && <Loader2 className="w-5 h-5 mr-2 animate-spin" />}
               Lock Funds & Publish Offer
