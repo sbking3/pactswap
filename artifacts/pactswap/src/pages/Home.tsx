@@ -1,10 +1,19 @@
-import { Link } from "wouter";
+import { useEffect } from "react";
+import { Link, useLocation } from "wouter";
 import { Button } from "@/components/ui/button";
 import PactSwapLogo from "@/components/PactSwapLogo";
 import { Shield, Zap, CheckCircle2, TrendingUp, Users, ArrowRight } from "lucide-react";
 import { motion } from "framer-motion";
+import { useAuth } from "@/contexts/AuthContext";
 
 export default function Home() {
+  const { user } = useAuth();
+  const [, setLocation] = useLocation();
+
+  useEffect(() => {
+    if (user) setLocation("/marketplace");
+  }, [user]);
+
   return (
     <div className="flex flex-col min-h-screen">
       {/* Hero Section */}

@@ -1,0 +1,96 @@
+PACTSWAP FINAL LOGIN SYSTEM - CONNECT ONCE, REMEMBER FOREVER, AUTO REDIRECT
+
+RULES:
+1. Landing page only shows to NEW users
+2. If wallet is connected, SKIP landing and go straight to /p2p
+3. Login modal NEVER shows again if wallet is already connected
+4. Fix "Connect Wallet" button so Metamask actually pops
+
+=== PART 1: LAYOUT WRAPPER - CONTROLS ALL ROUTING ===
+File: /app/layout.jsx
+REPLACE ENTIRE FILE:
+
+'use client'
+import { WagmiConfig, createConfig } from 'wagmi'
+import { bsc } from 'wagmi/chains'
+import { MetaMaskConnector } from 'wagmi/connectors/metaMask'
+import { useAccount } from 'wagmi'
+import { useRouter, usePathname } from 'next/navigation'
+import { useEffect } from 'react'
+
+const config = createConfig({
+  autoConnect: true, // REMEMBER WALLET
+  connectors: [new MetaMaskConnector({ chains: [bsc] })],
+  publicClient: // your public client
+})
+
+function AuthChecker({children}) {
+  const { isConnected } = useAccount()
+  const router = useRouter()
+  const pathname = usePathname()
+
+  useEffect(() => {
+    // IF LOGGED IN AND ON HOMEPAGE OR LOGIN, SEND TO P2P
+    if (isConnected && (pathname === '/' || pathname === '/login')) {
+      router.push('/p2p')
+    }
+    // IF NOT LOGGED IN AND ON P2P, SEND TO HOME
+    if (!isConnected && pathname === '/p2p') {
+      router.push('/')
+    }
+  }, [isConnected, pathname, router])
+
+  return children
+}
+
+export default function RootLayout({ children }) {
+  return (
+    <html>
+      <body>
+        <WagmiConfig config={config}>
+          <AuthChecker>{children}</AuthChecker>
+        </WagmiConfig>
+      </body>
+    </html>
+  )
+}
+
+
+=== PART 2: HOMEPAGE - ONLY FOR GUESTS ===
+File: /app/page.jsx
+REPLACE WITH:
+export default function Home() {
+  return (
+    <div>
+      <h1>Trade with Trust. PACTSWAP.</h1>
+      <p>The premium dark-mode P2P USDT escrow trading platform.</p>
+      <button onClick={() => window.location.href='/p2p'}>Start Trading</button>
+      <button onClick={() => window.location.href='/p2p'}>View Marketplace</button>
+      // Clicking either will trigger wallet connect if not connected
+    </div>
+  )
+}
+
+
+=== PART 3: DELETE THE LOGIN PAGE COMPLETELY ===
+Delete file: /app/login/page.jsx
+We don't need it anymore. Wallet connect happens on button click.
+
+=== PART 4: CONNECT BUTTON THAT ACTUALLY WORKS ===
+File: /components/ConnectButton.jsx
+REPLACE WITH:
+'use client'
+import { useConnect, useAccount, useDisconnect } from 'wagmi'
+import { MetaMaskConnector } from 'wagmi/connectors/metaMask'
+
+export default function ConnectButton() {
+  const { connect } = useConnect()
+  const { isConnected, address } = useAccount()
+  const { disconnect } = useDisconnect()
+
+  if (isConnected) return <button onClick={disconnect}>{address?.slice(0,6)}...{address?.slice(-4)}</button>
+  
+  return <button onClick={() => connect({ connector: new MetaMaskConnector() })}>
+    Connect Wallet
+  </button>
+}

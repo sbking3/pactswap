@@ -1,4 +1,4 @@
-import { useGetDashboardStats, useListOrders, getListOrdersQueryKey } from "@workspace/api-client-react";
+import { useGetDashboardStats, useListOrders } from "@workspace/api-client-react";
 import { Link } from "wouter";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";

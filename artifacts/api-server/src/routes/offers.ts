@@ -64,14 +64,9 @@ router.post("/offers", requireAuth, async (req, res) => {
     return;
   }
 
-  // Check KYC level
   const users = await db.select().from(usersTable).where(eq(usersTable.id, req.user!.userId));
   if (users.length === 0) {
     res.status(404).json({ error: "User not found" });
-    return;
-  }
-  if (users[0].kycLevel < 1) {
-    res.status(403).json({ error: "KYC verification (Level 1) required to create offers" });
     return;
   }
 
