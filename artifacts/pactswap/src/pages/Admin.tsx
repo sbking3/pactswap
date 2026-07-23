@@ -105,19 +105,24 @@ function fmtDate(d: string) {
 }
 
 // ─── TAB 1 — Marketplace ───────────────────────────────────────────────────────
-function MarketplaceTab({ stats }: { stats: any }) {
+function MarketplaceTab({ stats, onCleared }: { stats: any; onCleared: () => void }) {
   const { toast } = useToast();
   const [step, setStep] = useState<0 | 1 | 2>(0);
   const [confirmText, setConfirmText] = useState("");
   const [loading, setLoading] = useState(false);
+  const [lastResult, setLastResult] = useState<{ deleted: number; skipped: number } | null>(null);
 
   async function doClear() {
     setLoading(true);
     try {
       const r = await apiFetch("/api/admin/offers/clear", { method: "POST" });
-      toast({ description: r.message });
+      setLastResult({ deleted: r.deleted, skipped: r.skipped });
+      toast({
+        description: `Marketplace cleared: ${r.deleted} deleted, ${r.skipped} skipped.`,
+      });
       setStep(0);
       setConfirmText("");
+      onCleared(); // refresh stats in parent
     } catch (e: any) {
       toast({ variant: "destructive", description: e.message });
     } finally {
@@ -712,14 +717,18 @@ export default function Admin() {
 
   const isAdmin = user?.walletAddress?.toLowerCase() === ADMIN_WALLET;
 
+  function fetchStats() {
+    apiFetch("/api/admin/stats")
+      .then(setStats)
+      .catch((e: any) => toast({ variant: "destructive", description: e.message }));
+  }
+
   useEffect(() => {
     // Wait until auth finishes loading before making any routing decisions
     if (isLoading) return;
     if (!user) { setLocation("/login"); return; }
     if (!isAdmin) return; // show 403 below instead of redirecting away
-    apiFetch("/api/admin/stats")
-      .then(setStats)
-      .catch((e: any) => toast({ variant: "destructive", description: e.message }));
+    fetchStats();
   }, [user, isLoading]);
 
   // Still loading auth
@@ -790,7 +799,7 @@ export default function Admin() {
       </div>
 
       {/* tab content */}
-      {tab === "marketplace" && <MarketplaceTab stats={stats} />}
+      {tab === "marketplace" && <MarketplaceTab stats={stats} onCleared={fetchStats} />}
       {tab === "users" && <UsersTab />}
       {tab === "orders" && <OrdersTab />}
       {tab === "disputes" && <DisputesTab />}

@@ -105,6 +105,8 @@ router.post("/admin/offers/clear", requireAdmin, async (req, res) => {
     skipped,
   });
 
+  logger.info(`ADMIN CLEAR: deleted ${toDelete.length}, skipped ${skipped}`);
+
   res.json({
     deleted: toDelete.length,
     skipped,

@@ -1,0 +1,65 @@
+FIX PACTSWAP: MAKE "CLEAR MARKETPLACE" ACTUALLY DELETE FROM DB
+
+=== 1. BACKEND API FIX: /api/admin/offers/clear ===
+Replace your whole API file with this:
+
+import { PrismaClient } from '@prisma/client' // or your db
+const prisma = new PrismaClient()
+
+export default async function handler(req, res) {
+  if (req.method !== 'POST') return res.status(405).end()
+  
+  const { wallet } = req.body
+  const ADMIN_WALLET = "0xF71C8E88aA5e433603FB76afCea62D02b9751338"
+  
+  if (!wallet || wallet.toLowerCase() !== ADMIN_WALLET.toLowerCase()) {
+    return res.status(403).json({ error: 'Unauthorized' })
+  }
+
+  // Find all active offers with NO active orders
+  const offersToDelete = await prisma.offer.findMany({
+    where: { 
+      isActive: true, 
+      status: 'Active',
+      orders: { none: { status: { in: [0, 1] } // 0=awaiting, 1=paid
+    }
+  })
+  
+  const offerIds = offersToDelete.map(o => o.id)
+  
+  // BULK UPDATE - THIS IS THE KEY PART
+  const result = await prisma.offer.updateMany({
+    where: { id: { in: offerIds } },
+    data: { isActive: false, status: 'Deleted' }
+  })
+  
+  await prisma.adminLog.create({
+    data: { action: 'CLEAR_MARKETPLACE', wallet, deleted: result.count }
+  })
+  
+  return res.status(200).json({ 
+    deleted: result.count, 
+    skipped: 4 - result.count, // 4 = your current active offers
+    message: `${result.count} offers cleared` 
+  })
+}
+
+=== 2. FRONTEND FIX: FORCE REFRESH AFTER DELETE ===
+In your ClearMarketplaceButton.jsx:
+
+const handleClear = async () => {
+  const res = await fetch('/api/admin/offers/clear', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({wallet: connectedWallet})
+  })
+  const data = await res.json()
+  
+  if(res.ok){
+    toast.success(data.message) // "3 offers cleared"
+    await fetchOffers() // CRITICAL: reload offers from DB
+    setActiveOffersCount(data.deleted) // update the "4 Active Offers" card
+  } else {
+    toast.error(data.error)
+  }
+}
