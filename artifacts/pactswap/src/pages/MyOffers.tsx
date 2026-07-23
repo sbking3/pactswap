@@ -37,6 +37,8 @@ type Offer = {
   paymentMethod: string;
   isActive: boolean;
   createdAt: string;
+  /** Injected by API — true when status-0 or status-1 orders exist for this offer */
+  hasActiveTrades?: boolean;
 };
 
 export default function MyOffers() {
@@ -141,19 +143,24 @@ export default function MyOffers() {
       </td>
       <td className="px-5 py-4 text-muted-foreground text-sm">{offer.paymentMethod}</td>
       <td className="px-5 py-4">
-        {offer.isActive ? (
-          <Badge variant="outline" className="bg-green-500/10 text-green-500 border-green-500/20 font-medium">
-            Active
+        {!offer.isActive ? (
+          <Badge variant="outline" className="bg-gray-500/10 text-gray-500 border-gray-500/20 font-medium">
+            Removed
+          </Badge>
+        ) : offer.hasActiveTrades ? (
+          <Badge variant="outline" className="bg-yellow-500/10 text-yellow-500 border-yellow-500/20 font-medium">
+            In Trade
           </Badge>
         ) : (
-          <Badge variant="outline" className="bg-gray-500/10 text-gray-500 border-gray-500/20 font-medium">
-            Inactive
+          <Badge variant="outline" className="bg-green-500/10 text-green-500 border-green-500/20 font-medium">
+            Active
           </Badge>
         )}
       </td>
       <td className="px-5 py-4 text-right">
-        <div className="flex items-center justify-end gap-2">
-          {offer.isActive && (
+        {/* Only show Edit + Delete when it's an active offer with no live trades */}
+        {offer.isActive && !offer.hasActiveTrades ? (
+          <div className="flex items-center justify-end gap-2">
             <Button
               size="sm"
               variant="ghost"
@@ -163,17 +170,19 @@ export default function MyOffers() {
             >
               <Pencil className="h-4 w-4" />
             </Button>
-          )}
-          <Button
-            size="sm"
-            variant="ghost"
-            className="h-8 w-8 p-0 text-muted-foreground hover:text-red-500"
-            title="Delete offer"
-            onClick={() => setDeleteId(offer.id)}
-          >
-            <Trash2 className="h-4 w-4" />
-          </Button>
-        </div>
+            <Button
+              size="sm"
+              variant="ghost"
+              className="h-8 w-8 p-0 text-muted-foreground hover:text-red-500"
+              title="Delete offer"
+              onClick={() => setDeleteId(offer.id)}
+            >
+              <Trash2 className="h-4 w-4" />
+            </Button>
+          </div>
+        ) : (
+          <span className="text-xs text-muted-foreground pr-2">—</span>
+        )}
       </td>
     </tr>
   );

@@ -200,6 +200,8 @@ export interface Offer {
   isActive: boolean;
   createdAt: string;
   seller?: PublicProfile;
+  /** True when there are open/payment-pending orders against this offer */
+  hasActiveTrades?: boolean;
 }
 
 export interface OfferInput {

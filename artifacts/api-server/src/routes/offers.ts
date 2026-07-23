@@ -1,7 +1,7 @@
 import { Router } from "express";
 import { db } from "@workspace/db";
 import { offersTable, usersTable, ordersTable } from "@workspace/db";
-import { eq, and, gte, lte, or } from "drizzle-orm";
+import { eq, and, gte, lte, or, inArray } from "drizzle-orm";
 import { requireAuth } from "../middlewares/authMiddleware";
 
 const OFFER_MIN_USDT = 5;
@@ -92,7 +92,24 @@ router.get("/offers/my", requireAuth, async (req, res) => {
   const offers = await db.select().from(offersTable).where(eq(offersTable.sellerId, req.user!.userId));
   const sellers = await db.select().from(usersTable).where(eq(usersTable.id, req.user!.userId));
   const seller = sellers[0];
-  res.json(offers.map(o => ({ ...o, seller: seller ? toPublicProfile(seller) : null })));
+
+  // Determine which offers have in-progress orders (status 0=awaiting payment, 1=payment sent)
+  const offerIds = offers.map(o => o.id);
+  const activeOrderRows = offerIds.length > 0
+    ? await db.select({ offerId: ordersTable.offerId }).from(ordersTable).where(
+        and(
+          inArray(ordersTable.offerId, offerIds),
+          or(eq(ordersTable.status, 0), eq(ordersTable.status, 1))
+        )
+      )
+    : [];
+  const activeTradeOfferIds = new Set(activeOrderRows.map(r => r.offerId));
+
+  res.json(offers.map(o => ({
+    ...o,
+    seller: seller ? toPublicProfile(seller) : null,
+    hasActiveTrades: activeTradeOfferIds.has(o.id),
+  })));
 });
 
 // GET /api/offers/:id
@@ -120,6 +137,18 @@ router.patch("/offers/:id", requireAuth, async (req, res) => {
   }
   if (!offers[0].isActive) {
     res.status(400).json({ error: "Cannot edit order that is in progress" });
+    return;
+  }
+
+  // Block edit if any orders are currently open/payment-pending against this offer
+  const activeTrades = await db.select().from(ordersTable).where(
+    and(
+      eq(ordersTable.offerId, req.params.id as string),
+      or(eq(ordersTable.status, 0), eq(ordersTable.status, 1))
+    )
+  );
+  if (activeTrades.length > 0) {
+    res.status(400).json({ error: "Cannot edit offer with active trades" });
     return;
   }
 
