@@ -295,35 +295,39 @@ export default function Marketplace() {
       </div>
 
       <div className="container mx-auto px-4 py-6 max-w-7xl">
-        {/* ── Buy / Sell tabs ──────────────────────────────────────────── */}
-        <div className="flex items-center gap-1 mb-6">
-          <button
-            onClick={() => setTab("buy")}
-            className={`px-6 py-2 rounded font-semibold text-sm transition-colors ${
-              tab === "buy" ? "bg-primary text-black" : "text-muted-foreground hover:text-white"
-            }`}
-          >
-            Buy
-          </button>
-          <button
-            onClick={() => setTab("sell")}
-            className={`px-6 py-2 rounded font-semibold text-sm transition-colors ${
-              tab === "sell" ? "bg-primary text-black" : "text-muted-foreground hover:text-white"
-            }`}
-          >
-            Sell
-          </button>
-          <div className="ml-auto flex items-center gap-2">
-            <div className="relative">
+        {/* ── Buy / Sell tabs + filter ─────────────────────────────────── */}
+        <div className="flex flex-col sm:flex-row sm:items-center gap-3 mb-6">
+          {/* Tabs */}
+          <div className="flex items-center gap-1">
+            <button
+              onClick={() => setTab("buy")}
+              className={`px-6 py-2 rounded font-semibold text-sm transition-colors ${
+                tab === "buy" ? "bg-primary text-black" : "text-muted-foreground hover:text-white"
+              }`}
+            >
+              Buy
+            </button>
+            <button
+              onClick={() => setTab("sell")}
+              className={`px-6 py-2 rounded font-semibold text-sm transition-colors ${
+                tab === "sell" ? "bg-primary text-black" : "text-muted-foreground hover:text-white"
+              }`}
+            >
+              Sell
+            </button>
+          </div>
+          {/* Search — full width on mobile, auto on desktop */}
+          <div className="flex items-center gap-2 sm:ml-auto">
+            <div className="relative flex-1 sm:flex-none">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
               <Input
                 placeholder="Amount..."
                 value={amountFilter}
                 onChange={(e) => setAmountFilter(e.target.value)}
-                className="pl-9 h-9 w-44 bg-card border-border text-sm"
+                className="pl-9 h-9 w-full sm:w-40 bg-card border-border text-sm"
               />
             </div>
-            <div className="px-3 h-9 flex items-center bg-card border border-border rounded text-sm text-muted-foreground">NGN</div>
+            <div className="px-3 h-9 flex items-center bg-card border border-border rounded text-sm text-muted-foreground flex-shrink-0">NGN</div>
           </div>
         </div>
 
