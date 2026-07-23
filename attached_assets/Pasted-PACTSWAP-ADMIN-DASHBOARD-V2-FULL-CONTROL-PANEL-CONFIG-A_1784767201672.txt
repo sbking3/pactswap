@@ -1,0 +1,67 @@
+PACTSWAP ADMIN DASHBOARD V2 - FULL CONTROL PANEL
+
+=== CONFIG ===
+ADMIN_WALLET = "0xF71C8E88aA5e433603FB76afCea62D02b9751338"
+ONLY THIS WALLET CAN ACCESS /admin. BLOCK ALL OTHERS WITH 403
+
+=== PAGE: /admin ===
+4 TABS: 1.Marketplace 2.Users 3.Orders 4.Disputes
+
+=== TAB 1: MARKETPLACE CONTROL ===
+1. STATS: Total Active Offers, Total Users, Total Volume USDT
+2. FEATURE: BULK DELETE ALL ACTIVE OFFERS
+   BUTTON: "Clear Marketplace" [Red button with warning icon]
+
+   2-STEP CONFIRMATION:
+   - Modal 1: "Warning: This will delete all ACTIVE offers. This cannot be undone." [Continue]
+   - Modal 2: "Type DELETE to confirm" [Input] [Confirm]
+
+   API: POST /api/admin/offers/clear
+   - Verify: req.user.wallet == ADMIN_WALLET
+   - Find all offers where isActive = true AND status = 'Active'
+   - Check if offer has orders with status 0 "awaiting payment" or 1 "payment sent"
+   - If YES: skip it. If NO: set isActive = false, status = 'Deleted'
+   - Return: { deleted: X, skipped: Y, message: "X offers cleared. Y skipped due to active trades" }
+
+   LOGGING: Save to admin_logs: { action: 'CLEAR_MARKETPLACE', wallet: ADMIN_WALLET, deleted: X, timestamp }
+   FRONTEND: After success, refresh marketplace. Show toast: "Marketplace cleared successfully"
+   SECURITY: Only affects ACTIVE offers. Locked/In Trade offers are protected. Soft delete for audit.
+
+=== TAB 2: USER MANAGEMENT ===
+1. TABLE: All Users
+   Columns: Wallet, Email, Join Date, Total Trades, Status [Active/Frozen], Actions
+2. ACTIONS:
+   - "Freeze Account": PATCH /api/admin/users/:wallet/freeze → set user.isFrozen = true
+   - "Unfreeze Account": PATCH /api/admin/users/:wallet/unfreeze → set user.isFrozen = false
+   - Blocked users cannot create offers or buy
+3. LOGGING: Save to admin_logs: { action: 'FREEZE_USER', target: wallet, admin: ADMIN_WALLET }
+
+=== TAB 3: ORDER MANAGEMENT ===
+1. TABLE: All Orders
+   Columns: OrderID, Buyer, Seller, Amount USDT, Status, CreatedAt, Actions
+2. FILTERS: All, Active, Locked, Disputed, Completed, Cancelled
+3. ACTION: "Force Cancel"
+   - API: POST /api/admin/orders/:id/cancel
+   - Only works if status!= 'Completed'
+   - Refund escrow to seller if funds locked
+
+=== TAB 4: DISPUTE RESOLUTION ===
+1. TABLE: All Disputed Orders where status = 'Disputed'
+   Columns: OrderID, Buyer, Seller, Amount, Evidence, Time in Dispute, Actions
+2. DISPUTE DETAIL MODAL:
+   - Show chat history between buyer/seller
+   - Show payment proof uploaded by buyer
+   - Show seller bank details
+   - 3 ACTION BUTTONS:
+     a. "Release to Buyer": Send escrow USDT to buyer. status = 'Completed'
+     b. "Refund to Seller": Return escrow USDT to seller. status = 'Cancelled'
+     c. "Split 50/50": Send 50% to each. status = 'Completed'
+3. API: POST /api/admin/disputes/:orderId/resolve
+   Body: { decision: 'release_buyer' | 'refund_seller' | 'split', reason: 'text' }
+4. NOTIFICATION: After decision, notify both users via email + in-app
+5. LOGGING: Save to dispute_logs: { orderId, decision, admin: ADMIN_WALLET, reason, timestamp }
+
+=== GLOBAL SECURITY ===
+- Middleware: Check wallet on every /api/admin/* route
+- If wallet!= ADMIN_WALLET → return 403 "Unauthorized"
+- All admin actions must be logged
