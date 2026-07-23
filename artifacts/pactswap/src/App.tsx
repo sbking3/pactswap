@@ -21,6 +21,7 @@ import KYC from '@/pages/KYC';
 import SecuritySettings from '@/pages/SecuritySettings';
 import UserProfile from '@/pages/UserProfile';
 import MyOffers from '@/pages/MyOffers';
+import Admin from '@/pages/Admin';
 import NotFound from '@/pages/not-found';
 
 const queryClient = new QueryClient({
@@ -89,6 +90,12 @@ function Router() {
         <Route path="/settings/security">
           <ProtectedRoute>
             <SecuritySettings />
+          </ProtectedRoute>
+        </Route>
+
+        <Route path="/admin">
+          <ProtectedRoute>
+            <Admin />
           </ProtectedRoute>
         </Route>
 

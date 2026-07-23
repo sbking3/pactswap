@@ -4,3 +4,4 @@ export * from "./kyc";
 export * from "./offers";
 export * from "./orders";
 export * from "./disputes";
+export * from "./adminLogs";
