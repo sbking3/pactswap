@@ -19,7 +19,7 @@ import { approveUsdtForEscrow, openEscrowOnChain, CONTRACT_ADDRESS } from "@/lib
 import { useWallet } from "@/hooks/useWallet";
 import { WalletGuideModal } from "@/components/WalletGuideModal";
 
-const USDT_MIN = 1;
+const USDT_MIN = 5;
 const USDT_MAX = 10000;
 
 // ── Phase types ───────────────────────────────────────────────────────────────
@@ -125,7 +125,7 @@ export default function Marketplace() {
   // ── Validate amount fields ────────────────────────────────────────────────────
   function validateAmount(amountNum: number): boolean {
     if (!buyAmount || isNaN(amountNum)) { toast.error("Please enter a valid amount"); return false; }
-    if (amountNum < USDT_MIN) { toast.error(`Minimum trade is ${USDT_MIN} USDT`); return false; }
+    if (amountNum < USDT_MIN) { toast.error(`Minimum buy amount is $${USDT_MIN} USDT`); return false; }
     if (amountNum > USDT_MAX) { toast.error(`Maximum trade is ${USDT_MAX.toLocaleString()} USDT`); return false; }
     if (amountNum < selectedOffer.minTrade || amountNum > selectedOffer.maxTrade) {
       toast.error(`Amount must be ${selectedOffer.minTrade}–${selectedOffer.maxTrade} USDT`); return false;

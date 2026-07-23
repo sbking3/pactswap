@@ -43,13 +43,13 @@ export default function CreateOffer() {
       return;
     }
 
-    if (payload.amountUsdt < 1 || payload.amountUsdt > 10000) {
-      toast.error("Total amount must be between 1 and 10,000 USDT.");
+    if (payload.amountUsdt < 5 || payload.amountUsdt > 10000) {
+      toast.error("Minimum trade amount is $5 USDT.");
       return;
     }
 
-    if (payload.minTrade < 1) {
-      toast.error("Minimum trade must be at least 1 USDT.");
+    if (payload.minTrade < 5) {
+      toast.error("Minimum trade must be at least $5 USDT.");
       return;
     }
 
@@ -157,6 +157,7 @@ export default function CreateOffer() {
                       <span className="text-primary font-bold text-sm">USDT</span>
                     </div>
                   </div>
+                  <p className="text-xs text-muted-foreground">Min: $5 USDT</p>
                 </div>
               </div>
             </div>

@@ -1,8 +1,10 @@
 import { Router } from "express";
 import { db } from "@workspace/db";
-import { offersTable, usersTable } from "@workspace/db";
-import { eq, and, gte, lte } from "drizzle-orm";
+import { offersTable, usersTable, ordersTable } from "@workspace/db";
+import { eq, and, gte, lte, or } from "drizzle-orm";
 import { requireAuth } from "../middlewares/authMiddleware";
+
+const OFFER_MIN_USDT = 5;
 
 const router = Router();
 
@@ -51,6 +53,15 @@ router.post("/offers", requireAuth, async (req, res) => {
     return;
   }
 
+  if (Number(amountUsdt) < OFFER_MIN_USDT) {
+    res.status(400).json({ error: `Minimum trade amount is $${OFFER_MIN_USDT} USDT` });
+    return;
+  }
+  if (Number(minTrade) < OFFER_MIN_USDT) {
+    res.status(400).json({ error: `Minimum trade limit must be at least $${OFFER_MIN_USDT} USDT` });
+    return;
+  }
+
   // Check KYC level
   const users = await db.select().from(usersTable).where(eq(usersTable.id, req.user!.userId));
   if (users.length === 0) {
@@ -96,7 +107,7 @@ router.get("/offers/:id", async (req, res) => {
   res.json({ ...offer, seller: sellers[0] ? toPublicProfile(sellers[0]) : null });
 });
 
-// PATCH /api/offers/:id
+// PATCH /api/offers/:id  — only creator, only when isActive
 router.patch("/offers/:id", requireAuth, async (req, res) => {
   const offers = await db.select().from(offersTable).where(eq(offersTable.id, req.params.id as string));
   if (offers.length === 0) {
@@ -107,14 +118,28 @@ router.patch("/offers/:id", requireAuth, async (req, res) => {
     res.status(403).json({ error: "Not authorized" });
     return;
   }
+  if (!offers[0].isActive) {
+    res.status(400).json({ error: "Cannot edit order that is in progress" });
+    return;
+  }
 
-  const { priceNaira, amountUsdt, minTrade, maxTrade, isActive } = req.body;
+  // Validate new amounts against $5 minimum
+  if (req.body.amountUsdt !== undefined && Number(req.body.amountUsdt) < OFFER_MIN_USDT) {
+    res.status(400).json({ error: `Minimum trade amount is $${OFFER_MIN_USDT} USDT` });
+    return;
+  }
+  if (req.body.minTrade !== undefined && Number(req.body.minTrade) < OFFER_MIN_USDT) {
+    res.status(400).json({ error: `Minimum trade limit must be at least $${OFFER_MIN_USDT} USDT` });
+    return;
+  }
+
+  const { priceNaira, amountUsdt, minTrade, maxTrade, paymentMethod } = req.body;
   const updates: Record<string, unknown> = {};
   if (priceNaira !== undefined) updates.priceNaira = priceNaira;
   if (amountUsdt !== undefined) updates.amountUsdt = amountUsdt;
   if (minTrade !== undefined) updates.minTrade = minTrade;
   if (maxTrade !== undefined) updates.maxTrade = maxTrade;
-  if (isActive !== undefined) updates.isActive = isActive;
+  if (paymentMethod !== undefined) updates.paymentMethod = paymentMethod;
   updates.updatedAt = new Date();
 
   const updated = await db.update(offersTable).set(updates).where(eq(offersTable.id, req.params.id as string)).returning();
@@ -122,7 +147,7 @@ router.patch("/offers/:id", requireAuth, async (req, res) => {
   res.json({ ...updated[0], seller: sellers[0] ? toPublicProfile(sellers[0]) : null });
 });
 
-// DELETE /api/offers/:id
+// DELETE /api/offers/:id  — creator only; blocked if trade is in progress (order status 0=created or 1=paid)
 router.delete("/offers/:id", requireAuth, async (req, res) => {
   const offers = await db.select().from(offersTable).where(eq(offersTable.id, req.params.id as string));
   if (offers.length === 0) {
@@ -133,7 +158,23 @@ router.delete("/offers/:id", requireAuth, async (req, res) => {
     res.status(403).json({ error: "Not authorized" });
     return;
   }
-  await db.delete(offersTable).where(eq(offersTable.id, req.params.id as string));
+
+  // Block delete if there are open / payment-pending orders against this offer
+  const liveOrders = await db.select().from(ordersTable).where(
+    and(
+      eq(ordersTable.offerId, req.params.id as string),
+      or(eq(ordersTable.status, 0), eq(ordersTable.status, 1))
+    )
+  );
+  if (liveOrders.length > 0) {
+    res.status(400).json({ error: "Cannot delete order in progress" });
+    return;
+  }
+
+  // Soft-delete: remove from marketplace by deactivating
+  await db.update(offersTable)
+    .set({ isActive: false, updatedAt: new Date() })
+    .where(eq(offersTable.id, req.params.id as string));
   res.json({ message: "Offer deleted" });
 });
 

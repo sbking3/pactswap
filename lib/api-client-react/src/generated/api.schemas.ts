@@ -216,6 +216,7 @@ export interface OfferUpdate {
   amountUsdt?: number;
   minTrade?: number;
   maxTrade?: number;
+  paymentMethod?: string;
   isActive?: boolean;
 }
 

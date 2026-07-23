@@ -20,6 +20,7 @@ import Profile from '@/pages/Profile';
 import KYC from '@/pages/KYC';
 import SecuritySettings from '@/pages/SecuritySettings';
 import UserProfile from '@/pages/UserProfile';
+import MyOffers from '@/pages/MyOffers';
 import NotFound from '@/pages/not-found';
 
 const queryClient = new QueryClient({
@@ -49,6 +50,12 @@ function Router() {
         
         <Route path="/marketplace" component={Marketplace} />
         
+        <Route path="/my-offers">
+          <ProtectedRoute>
+            <MyOffers />
+          </ProtectedRoute>
+        </Route>
+
         <Route path="/offers/create">
           <ProtectedRoute>
             <CreateOffer />

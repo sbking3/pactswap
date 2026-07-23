@@ -1,0 +1,54 @@
+FINAL UPDATE PACTSWAP: $5 MINIMUM + EDIT + DELETE ORDERS
+
+UPDATE THESE 3 FEATURES:
+
+=== FEATURE 1: MINIMUM TRADE AMOUNT = $5 ===
+REQUIREMENTS:
+1.  VALIDATION ON CREATE ORDER
+    - Minimum order amount is $5 USDT
+    - If user tries to create order with amount < 5, show error: "Minimum trade amount is $5 USDT"
+    - Block the transaction from going to Metamask
+2.  VALIDATION ON BUY
+    - If buyer tries to buy partial amount that is < $5, block it
+    - Error: "Minimum buy amount is $5 USDT"
+3.  UI
+    - In Create Order form, add text under Amount: "Min: $5 USDT"
+    - In input, set min="5"
+
+=== FEATURE 2: EDIT ORDERS ===
+RULES: Only order creator can edit. Only when status = "Active"
+REQUIREMENTS:
+1.  UI: /my-orders
+    - Add "Edit" pencil icon button next to "Delete" on Active orders
+    - Click opens modal with current Price, Amount, Payment Method pre-filled
+2.  EDITABLE FIELDS: Price Rate, Amount >= $5, Payment Method
+3.  API: /api/orders/:orderId [PATCH]
+    - Check: order.creator == loggedInUser AND order.status == 'Active'
+    - Update DB and update Marketplace listing instantly
+4.  BLOCKED: Cannot edit if status is Locked, In Trade, Completed, Disputed, Cancelled
+5.  ERROR: "Cannot edit order that is in progress"
+
+=== FEATURE 3: DELETE ORDERS FROM MARKETPLACE ===
+RULES: Only order creator can delete
+REQUIREMENTS:
+1.  DELETE BUTTON RULES
+    - Show "Delete" trash icon on orders created by logged-in user
+    - Allow delete for status: Active, Cancelled, Completed
+    - DO NOT allow delete if status is: Locked, In Trade, or Disputed
+2.  MARKETPLACE
+    - When user deletes an Active order, remove it from public Marketplace immediately
+3.  API: /api/orders/:orderId [DELETE]
+    - Check status. If Locked/In Trade/Disputed, return error: "Cannot delete order in progress"
+    - Soft delete: set `isDeleted = true` and `status = 'Deleted'` in DB
+4.  FRONTEND
+    - Add confirmation modal: "Delete this order? It will be removed from the marketplace."
+    - After delete, remove order from UI list immediately
+
+=== SECURITY ===
+Only order creator can Edit/Delete. Check wallet address matches order creator.
+
+=== TEST AFTER FIX ===
+1. Try create order with $3 → Should show "Minimum $5" error
+2. Create order $10 → Click Edit → Change to $20 → Should update in Marketplace
+3. Create order $10 → Click Delete → Order disappears from marketplace
+4. Try delete an order that is "Locked" → Should show "Cannot delete" error
