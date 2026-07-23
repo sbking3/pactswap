@@ -704,7 +704,7 @@ const TABS = [
 
 // ─── MAIN ──────────────────────────────────────────────────────────────────────
 export default function Admin() {
-  const { user } = useAuth();
+  const { user, isLoading } = useAuth();
   const [, setLocation] = useLocation();
   const [tab, setTab] = useState("marketplace");
   const [stats, setStats] = useState<any>(null);
@@ -713,14 +713,39 @@ export default function Admin() {
   const isAdmin = user?.walletAddress?.toLowerCase() === ADMIN_WALLET;
 
   useEffect(() => {
+    // Wait until auth finishes loading before making any routing decisions
+    if (isLoading) return;
     if (!user) { setLocation("/login"); return; }
-    if (!isAdmin) { setLocation("/dashboard"); return; }
+    if (!isAdmin) return; // show 403 below instead of redirecting away
     apiFetch("/api/admin/stats")
       .then(setStats)
       .catch((e: any) => toast({ variant: "destructive", description: e.message }));
-  }, [user]);
+  }, [user, isLoading]);
 
-  if (!user || !isAdmin) return null;
+  // Still loading auth
+  if (isLoading) {
+    return (
+      <div className="flex-1 flex items-center justify-center p-8">
+        <div className="w-8 h-8 border-2 border-primary border-t-transparent rounded-full animate-spin" />
+      </div>
+    );
+  }
+
+  // Authenticated but wrong wallet
+  if (user && !isAdmin) {
+    return (
+      <div className="flex-1 flex items-center justify-center p-8">
+        <div className="text-center space-y-3">
+          <div className="text-6xl">🚫</div>
+          <h1 className="text-2xl font-bold text-destructive">403 Unauthorized</h1>
+          <p className="text-muted-foreground">Admin only. Connected wallet is not authorised.</p>
+          <p className="text-xs font-mono text-muted-foreground">{user.walletAddress}</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (!user) return null;
 
   return (
     <div className="container mx-auto px-4 py-8 max-w-6xl">

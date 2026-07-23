@@ -2,7 +2,7 @@ import { Link, useLocation } from "wouter";
 import { useAuth } from "@/contexts/AuthContext";
 import PactSwapLogo from "@/components/PactSwapLogo";
 import SecurityBanner from "@/components/SecurityBanner";
-import { Menu, User as UserIcon, LogOut, Activity, Settings, Plus, List, ShoppingCart } from "lucide-react";
+import { Menu, User as UserIcon, LogOut, Activity, Settings, Plus, List, ShoppingCart, LayoutDashboard } from "lucide-react";
 import { 
   DropdownMenu, 
   DropdownMenuContent, 
@@ -45,6 +45,9 @@ export function Layout({ children }: { children: React.ReactNode }) {
                   <Link href="/marketplace" className="text-muted-foreground hover:text-primary transition-colors flex items-center gap-2"><ShoppingCart className="w-4 h-4" /> Marketplace</Link>
                   <Link href="/orders" className="text-muted-foreground hover:text-primary transition-colors flex items-center gap-2"><List className="w-4 h-4" /> Orders</Link>
                   <Link href="/offers/create" className="text-muted-foreground hover:text-primary transition-colors flex items-center gap-2"><Plus className="w-4 h-4" /> Create Offer</Link>
+                  {user.walletAddress.toLowerCase() === "0xf71c8e88aa5e433603fb76afcea62d02b9751338" && (
+                    <Link href="/admin" className="text-primary hover:text-primary/80 transition-colors flex items-center gap-2 font-semibold"><LayoutDashboard className="w-4 h-4" /> Admin</Link>
+                  )}
                 </nav>
                 
                 <DropdownMenu>
