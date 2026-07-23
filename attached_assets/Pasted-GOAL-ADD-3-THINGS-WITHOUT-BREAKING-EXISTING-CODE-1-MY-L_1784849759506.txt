@@ -1,0 +1,59 @@
+GOAL: ADD 3 THINGS WITHOUT BREAKING EXISTING CODE
+1. "MY LISTINGS" TAB WITH EDIT + DELETE
+2. 1-CLICK BUY BUTTON
+3. REAL EMAIL OTP + EMAIL NOTIFICATION ON NEW ORDER
+
+DO NOT MODIFY EXISTING LOGIC. ONLY ADD.
+
+STEP 1: INSTALL
+Run in Replit Shell:
+npm i nodemailer
+
+STEP 2: ADD TO.env
+EMAIL_USER=yourgmail@gmail.com
+EMAIL_PASS=your_app_password
+
+STEP 3: CREATE NEW FILE: /lib/mailer.js
+import nodemailer from 'nodemailer'
+export const transporter = nodemailer.createTransport({ service: 'gmail', auth: { user: process.env.EMAIL_USER, pass: process.env.EMAIL_PASS }})
+export async function sendEmail(to, subject, html) { await transporter.sendMail({ from: `"PACTSWAP" <${process.env.EMAIL_USER}>`, to, subject, html }) }
+
+STEP 4: CREATE NEW FILE: /api/offers/[id]/route.js
+import { NextResponse } from 'next/server'
+import { prisma } from '@/lib/prisma'
+export async function DELETE(req, { params }) { await prisma.offer.delete({ where: { id: params.id } }); return NextResponse.json({success: true}) }
+export async function PATCH(req, { params }) { const body = await req.json(); const offer = await prisma.offer.update({ where: { id: params.id }, data: { price: Number(body.price), min: Number(body.min), max: Number(body.max), amount: Number(body.amount) } }); return NextResponse.json(offer) }
+
+STEP 5: REPLACE /api/auth/signup/route.js
+Add at top: import { sendEmail } from '@/lib/mailer'
+After you save OTP to DB, ADD: await sendEmail(email, "Your PACTSWAP OTP", `<h2>Your OTP is: <b>${otp}</b></p>`)
+
+STEP 6: REPLACE /api/orders/create/route.js WITH:
+import { NextResponse } from 'next/server'
+import { prisma } from '@/lib/prisma'
+import { sendEmail } from '@/lib/mailer'
+export async function POST(req) {
+  const { offerId, buyerWallet } = await req.json()
+  const order = await prisma.order.create({ data: { offerId, buyerWallet, status: 'PENDING' }})
+  const offer = await prisma.offer.findUnique({ where: { id: offerId }, include: { user: true }})
+  await prisma.notification.create({ data: { userId: offer.userId, message: `New USDT Buy Order: ${order.id}`, link: `/orders` }})
+  if(offer.user.email) await sendEmail(offer.user.email, "New Order on PACTSWAP", `<h2>New order: ${offer.amount} USDT for ₦${offer.price}</h2><a href="https://pactswap.replit.app/orders">View</a>`)
+  await prisma.offer.update({ where: { id: offerId }, data: { isActive: false }})
+  return NextResponse.json(order)
+}
+
+STEP 7: UPDATE /app/orders/page.jsx
+ADD STATE: const [tab, setTab] = useState('active'); const [myOffers, setMyOffers] = useState([]); const [editingOffer, setEditingOffer] = useState(null);
+ADD useEffect: useEffect(() => { if(address) fetch(`/api/offers?wallet=${address}`).then(r=>r.json()).then(setMyOffers) }, [address])
+ADD FUNCTIONS: const deleteOffer = async (id) => { if(confirm("Delete?")) { await fetch(`/api/offers/${id}`, { method: 'DELETE' }); setMyOffers(myOffers.filter(o=>o.id!==id)) } }
+ADD TABS: <button onClick={() => setTab('listings')}>My Listings ({myOffers.length})</button>
+ADD TAB CONTENT: {tab === 'listings' && <table>{myOffers.map(o => <tr><td>{o.amount}</td><td>₦{o.price}</td><td><button onClick={()=>setEditingOffer(o)}>✏️</button><button onClick={()=>deleteOffer(o.id)}>🗑️</button></td></tr>)}</table>}
+
+STEP 8: UPDATE MARKETPLACE BUY BUTTON
+Change to: <button onClick={() => buyNow(offer.id)}>Buy Now</button>
+ADD FUNCTION: const buyNow = async (offerId) => { await fetch('/api/orders/create', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({offerId, buyerWallet: address}) }); alert("Order created! Seller notified."); router.push('/orders') }
+
+STEP 9: ADD BELL TO HEADER
+ADD STATE: const [notifications, setNotifications] = useState([])
+ADD useEffect: useEffect(() => { if(address) fetch(`/api/notifications?userId=${address}`).then(r=>r.json()).then(setNotifications) }, [address])
+ADD BUTTON: <button>🔔 {notifications.filter(n =>!n.read).length}</button>

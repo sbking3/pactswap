@@ -3,7 +3,7 @@ import { Link, useLocation } from "wouter";
 import { useAuth } from "@/contexts/AuthContext";
 import PactSwapLogo from "@/components/PactSwapLogo";
 import SecurityBanner from "@/components/SecurityBanner";
-import { Menu, X, User as UserIcon, LogOut, Activity, Settings, Plus, List, ShoppingCart, LayoutDashboard } from "lucide-react";
+import { Menu, X, User as UserIcon, LogOut, Activity, Settings, Plus, List, ShoppingCart, LayoutDashboard, Store } from "lucide-react";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -36,6 +36,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
     { href: "/dashboard",    label: "Dashboard",    icon: Activity },
     { href: "/marketplace",  label: "Marketplace",  icon: ShoppingCart },
     { href: "/orders",       label: "Orders",       icon: List },
+    { href: "/my-offers",    label: "My Listings",  icon: Store },
     { href: "/offers/create",label: "Create Offer", icon: Plus },
     ...(user.walletAddress.toLowerCase() === ADMIN
       ? [{ href: "/admin", label: "Admin", icon: LayoutDashboard, highlight: true }]

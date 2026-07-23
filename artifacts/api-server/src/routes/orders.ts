@@ -6,6 +6,7 @@ import { eq, or } from "drizzle-orm";
 import { requireAuth } from "../middlewares/authMiddleware";
 import { verifyTxHash, readEscrow } from "../lib/contract";
 import { logger } from "../lib/logger";
+import { sendNewOrderEmail } from "../lib/resend";
 
 const router = Router();
 
@@ -147,6 +148,20 @@ router.post("/orders/initiate", requireAuth, async (req, res) => {
     logger.error({ err: err?.message }, "✗ DB save failed for buyer-initiated order");
     res.status(500).json({ error: "Failed to save order — please try again" });
     return;
+  }
+
+  // Send email notification to seller (non-blocking — never fails the request)
+  if (sellers[0].email) {
+    const buyers = await db.select().from(usersTable).where(eq(usersTable.id, req.user!.userId)).catch(() => []);
+    const buyerName = buyers[0]?.name ?? "A buyer";
+    sendNewOrderEmail(
+      sellers[0].email,
+      sellers[0].name ?? "Seller",
+      buyerName,
+      amount,
+      typeof priceNaira === "number" && priceNaira > 0 ? priceNaira : 0,
+      savedOrder.id,
+    ).catch((err: any) => logger.warn({ err: err?.message }, "New-order email failed (non-fatal)"));
   }
 
   res.status(201).json({ success: true, orderId: savedOrder.id });

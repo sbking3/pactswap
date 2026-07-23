@@ -98,7 +98,9 @@ export default function Marketplace() {
   const handleBuyClick = (offer: any) => {
     if (!token) { setLocation("/login"); return; }
     setSelectedOffer(offer);
-    setBuyAmount("");
+    // Pre-fill max allowed amount so buyer can confirm in one click
+    const prefill = Math.min(offer.maxTrade, offer.amountUsdt, USDT_MAX);
+    setBuyAmount(prefill > 0 ? prefill.toString() : "");
     setDialogPhase("input");
     setPendingEscrowId(null);
     setBuyDialogOpen(true);

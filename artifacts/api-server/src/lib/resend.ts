@@ -64,3 +64,78 @@ export async function sendSignupOtpEmail(
     throw new Error(error.message);
   }
 }
+
+export async function sendNewOrderEmail(
+  to: string,
+  sellerName: string,
+  buyerName: string,
+  amountUsdt: number,
+  priceNaira: number,
+  orderId: string,
+): Promise<void> {
+  const client = getClient();
+  if (!client) {
+    logger.warn("RESEND_API_KEY not set — skipping new order email");
+    return;
+  }
+
+  const ngnTotal = (amountUsdt * priceNaira).toLocaleString("en-NG");
+  const appUrl = process.env.APP_URL ?? "https://pactswap.replit.app";
+
+  const { error } = await client.emails.send({
+    from: FROM,
+    to,
+    subject: "🔔 New Buy Order on PACTSWAP",
+    html: `
+      <div style="background:#090909;color:#fff;padding:40px;font-family:Inter,sans-serif;max-width:520px;margin:auto;border-radius:12px;">
+        <div style="margin-bottom:28px;">
+          <svg width="36" height="36" viewBox="0 0 100 100" fill="none" style="vertical-align:middle;margin-right:10px;">
+            <path d="M50 5 L90 25 L90 55 C90 80 50 95 50 95 C50 95 10 80 10 55 L10 25 L50 5 Z" fill="#F5C242"/>
+          </svg>
+          <span style="font-size:20px;font-weight:700;vertical-align:middle;letter-spacing:1px;">PACTSWAP</span>
+        </div>
+
+        <h2 style="color:#F5C242;margin:0 0 8px;">New Order, ${sellerName}!</h2>
+        <p style="color:#aaa;margin:0 0 24px;line-height:1.6;">
+          <strong style="color:#fff;">${buyerName}</strong> has initiated a trade on your listing.
+          Lock the USDT in escrow to confirm the trade.
+        </p>
+
+        <div style="background:#141414;border:1.5px solid #F5C242;border-radius:10px;padding:24px;margin-bottom:24px;">
+          <table style="width:100%;border-collapse:collapse;">
+            <tr>
+              <td style="color:#888;font-size:13px;padding:6px 0;">Amount</td>
+              <td style="color:#F5C242;font-weight:700;font-size:18px;text-align:right;">${amountUsdt.toFixed(2)} USDT</td>
+            </tr>
+            <tr>
+              <td style="color:#888;font-size:13px;padding:6px 0;">Rate</td>
+              <td style="color:#fff;font-weight:600;text-align:right;">₦${priceNaira.toLocaleString()} / USDT</td>
+            </tr>
+            <tr>
+              <td style="color:#888;font-size:13px;padding:6px 0;">Buyer pays</td>
+              <td style="color:#fff;font-weight:600;text-align:right;">₦${ngnTotal}</td>
+            </tr>
+          </table>
+        </div>
+
+        <a href="${appUrl}/orders/${orderId}"
+           style="display:block;background:#F5C242;color:#000;font-weight:700;font-size:15px;text-align:center;padding:14px 24px;border-radius:8px;text-decoration:none;margin-bottom:24px;">
+          View Trade →
+        </a>
+
+        <p style="color:#666;font-size:13px;line-height:1.6;">
+          Lock the USDT in escrow as soon as possible to keep the trade moving.<br/>
+          If you have questions, visit your Orders page.
+        </p>
+
+        <hr style="border:none;border-top:1px solid #222;margin:28px 0;" />
+        <p style="color:#444;font-size:12px;margin:0;">Trade with Trust. <strong style="color:#F5C242;">PACTSWAP</strong></p>
+      </div>
+    `,
+  });
+
+  if (error) {
+    logger.error({ error, to }, "Resend new-order email failed");
+    // Non-fatal — don't throw; order is already saved
+  }
+}
