@@ -69,32 +69,23 @@ router.get("/admin/stats", requireAdmin, async (req, res) => {
 
 // ─── MARKETPLACE ──────────────────────────────────────────────────────────────
 
-// POST /api/admin/offers/clear  — force soft-delete ALL active offers, no checks
+// POST /api/admin/offers/clear  — HARD DELETE every offer row, no conditions
 router.post("/admin/offers/clear", requireAdmin, async (req, res) => {
-  const activeOffers = await db.select().from(offersTable).where(eq(offersTable.isActive, true));
+  // Count first so we can report how many were nuked
+  const all = await db.select({ id: offersTable.id }).from(offersTable);
+  const count = all.length;
 
-  if (activeOffers.length === 0) {
-    res.json({ deleted: 0, skipped: 0, message: "No active offers to clear." });
-    return;
+  if (count > 0) {
+    await db.delete(offersTable);
   }
 
-  const offerIds = activeOffers.map(o => o.id);
-
-  await db
-    .update(offersTable)
-    .set({ isActive: false, updatedAt: new Date() })
-    .where(inArray(offersTable.id, offerIds));
-
-  await logAction("FORCE_CLEAR_ALL", adminWallet(req), undefined, {
-    deleted: activeOffers.length,
-  });
-
-  logger.info(`ADMIN FORCE CLEAR: deleted ${activeOffers.length}`);
+  await logAction("NUKE_MARKETPLACE", adminWallet(req), undefined, { deleted: count });
+  logger.info(`ADMIN NUKE: permanently deleted ${count} offers`);
 
   res.json({
-    deleted: activeOffers.length,
+    deleted: count,
     skipped: 0,
-    message: `Force deleted ${activeOffers.length} offer${activeOffers.length !== 1 ? "s" : ""}.`,
+    message: `Marketplace nuked. ${count} offer${count !== 1 ? "s" : ""} permanently deleted.`,
   });
 });
 

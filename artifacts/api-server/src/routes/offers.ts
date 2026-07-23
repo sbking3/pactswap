@@ -14,6 +14,8 @@ function toPublicProfile(u: typeof usersTable.$inferSelect) {
 
 // GET /api/offers
 router.get("/offers", async (req, res) => {
+  res.setHeader("Cache-Control", "no-store, no-cache, must-revalidate");
+  res.setHeader("Pragma", "no-cache");
   const page = Math.max(1, parseInt(req.query.page as string) || 1);
   const limit = Math.min(50, parseInt(req.query.limit as string) || 20);
   const offset = (page - 1) * limit;

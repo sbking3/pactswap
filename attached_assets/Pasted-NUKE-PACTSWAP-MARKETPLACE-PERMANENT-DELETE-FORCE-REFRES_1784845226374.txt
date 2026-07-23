@@ -1,0 +1,105 @@
+NUKE PACTSWAP MARKETPLACE - PERMANENT DELETE + FORCE REFRESH
+
+GOAL: Permanently delete ALL offers from DB and make P2P page only show new active offers
+
+=== PART 1: BACKEND API - HARD DELETE ===
+File: /api/admin/offers/clear
+REPLACE ENTIRE FILE:
+
+import { PrismaClient } from '@prisma/client'
+const prisma = new PrismaClient()
+
+export default async function handler(req, res) {
+  if (req.method !== 'POST') return res.status(405).json({error: 'POST only'})
+  
+  const { wallet } = req.body
+  const ADMIN_WALLET = "0xF71C8E88aA5e433603FB76afCea62D02b9751338"
+  
+  if (!wallet || wallet.toLowerCase() !== ADMIN_WALLET.toLowerCase()) {
+    return res.status(403).json({ error: 'Unauthorized' })
+  }
+
+  try {
+    // 1. HARD DELETE ALL OFFERS
+    const result = await prisma.offer.deleteMany({})
+    
+    // 2. RESET ID COUNTER
+    await prisma.$executeRawUnsafe(`TRUNCATE TABLE "Offer" RESTART IDENTITY CASCADE;`)
+    
+    // 3. LOG IT
+    await prisma.adminLog.create({
+      data: { action: 'NUKE_MARKETPLACE', wallet, deleted: result.count, createdAt: new Date() }
+    })
+
+    return res.status(200).json({ 
+      deleted: result.count, 
+      message: `Marketplace nuked. ${result.count} offers permanently deleted.` 
+    })
+  } catch (error) {
+    return res.status(500).json({ error: error.message })
+  }
+}
+
+
+=== PART 2: API TO FETCH OFFERS - ONLY SHOW ACTIVE ===
+File: /api/offers
+REPLACE ENTIRE GET HANDLER:
+
+import { PrismaClient } from '@prisma/client'
+const prisma = new PrismaClient()
+
+export default async function handler(req, res) {
+  if (req.method !== 'GET') return res.status(405).end()
+  
+  // NO CACHE - always fresh
+  res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate')
+  
+  const offers = await prisma.offer.findMany({
+    where: { 
+      isActive: true, 
+      status: 'Active' 
+    },
+    include: { user: { select: { wallet: true, username: true }}},
+    orderBy: { createdAt: 'desc' }
+  })
+  
+  return res.status(200).json(offers)
+}
+
+
+=== PART 3: FRONTEND - FORCE REFRESH + NO CACHE ===
+File: /app/p2p/page.jsx  or wherever you fetch offers
+UPDATE fetchOffers function:
+
+const fetchOffers = async () => {
+  setLoading(true)
+  try {
+    const res = await fetch(`/api/offers?t=${Date.now()}`, { cache: 'no-store' })
+    const data = await res.json()
+    setOffers(data)
+  } catch (e) {
+    toast.error("Failed to load offers")
+  }
+  setLoading(false)
+}
+
+useEffect(() => {
+  fetchOffers()
+  const interval = setInterval(fetchOffers, 15000) // refresh every 15s
+  return () => clearInterval(interval)
+}, [])
+
+
+=== PART 4: ADMIN BUTTON UI ===
+In /admin page, the "Clear Marketplace" button should do:
+const handleClear = async () => {
+  if(!confirm("DELETE ALL OFFERS PERMANENTLY?")) return
+  const res = await fetch('/api/admin/offers/clear', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({ wallet: address })
+  })
+  const data = await res.json()
+  toast.success(data.message)
+  fetchOffers() // refresh UI
+}

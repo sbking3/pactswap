@@ -80,7 +80,10 @@ export default function Marketplace() {
   const isBusy = dialogPhase !== "input" && dialogPhase !== "approved";
 
   const { user, token } = useAuth();
-  const { data, isLoading } = useListOffers();
+  const { data, isLoading, refetch } = useListOffers(
+    undefined,
+    { query: { queryKey: ["offers"], refetchInterval: 15_000, staleTime: 0 } },
+  );
 
   // Wallet state — used to determine buyer vs seller role in the dialog
   const { address, isConnected, isConnecting, connectWallet, showWalletGuide, setShowWalletGuide } = useWallet();
