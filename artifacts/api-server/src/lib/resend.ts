@@ -1,33 +1,47 @@
-import { Resend } from "resend";
+import nodemailer from "nodemailer";
 import { logger } from "./logger";
 
-// Singleton — Resend client is stateless so one instance is fine
-let _client: Resend | null = null;
+// Shared Gmail SMTP transporter (pooled, reused across all sends)
+let _transporter: nodemailer.Transporter | null = null;
 
-function getClient(): Resend | null {
-  if (!process.env.RESEND_API_KEY) return null;
-  if (!_client) _client = new Resend(process.env.RESEND_API_KEY);
-  return _client;
+function getTransporter(): nodemailer.Transporter | null {
+  if (!process.env.EMAIL_USER || !process.env.EMAIL_PASS) return null;
+  if (!_transporter) {
+    _transporter = nodemailer.createTransport({
+      service: "gmail",
+      pool: true,
+      maxConnections: 5,
+      maxMessages: Infinity,
+      auth: {
+        user: process.env.EMAIL_USER,
+        pass: process.env.EMAIL_PASS,
+      },
+    });
+  }
+  return _transporter;
 }
 
-const FROM =
-  process.env.RESEND_FROM_EMAIL ?? "PACTSWAP <onboarding@resend.dev>";
+function from(): string {
+  return process.env.EMAIL_FROM ?? `"PACTSWAP" <${process.env.EMAIL_USER}>`;
+}
+
+// ── Signup OTP ────────────────────────────────────────────────────────────────
 
 export async function sendSignupOtpEmail(
   to: string,
   code: string,
   name: string,
 ): Promise<void> {
-  const client = getClient();
-  if (!client) {
-    logger.warn("RESEND_API_KEY not set — skipping email send");
+  const transporter = getTransporter();
+  if (!transporter) {
+    logger.warn("EMAIL_USER / EMAIL_PASS not set — skipping signup OTP email");
     return;
   }
 
-  const { error } = await client.emails.send({
-    from: FROM,
+  await transporter.sendMail({
+    from: from(),
     to,
-    subject: "Verify your PactSwap Account",
+    subject: "Verify your PACTSWAP Account",
     html: `
       <div style="background:#090909;color:#fff;padding:40px;font-family:Inter,sans-serif;max-width:520px;margin:auto;border-radius:12px;">
         <div style="margin-bottom:28px;">
@@ -59,11 +73,10 @@ export async function sendSignupOtpEmail(
     `,
   });
 
-  if (error) {
-    logger.error({ error, to }, "Resend email failed");
-    throw new Error(error.message);
-  }
+  logger.info({ to }, "Signup OTP email sent via Gmail SMTP");
 }
+
+// ── New order notification ────────────────────────────────────────────────────
 
 export async function sendNewOrderEmail(
   to: string,
@@ -73,17 +86,17 @@ export async function sendNewOrderEmail(
   priceNaira: number,
   orderId: string,
 ): Promise<void> {
-  const client = getClient();
-  if (!client) {
-    logger.warn("RESEND_API_KEY not set — skipping new order email");
+  const transporter = getTransporter();
+  if (!transporter) {
+    logger.warn("EMAIL_USER / EMAIL_PASS not set — skipping new order email");
     return;
   }
 
   const ngnTotal = (amountUsdt * priceNaira).toLocaleString("en-NG");
   const appUrl = process.env.APP_URL ?? "https://pactswap.replit.app";
 
-  const { error } = await client.emails.send({
-    from: FROM,
+  await transporter.sendMail({
+    from: from(),
     to,
     subject: "🔔 New Buy Order on PACTSWAP",
     html: `
@@ -124,8 +137,7 @@ export async function sendNewOrderEmail(
         </a>
 
         <p style="color:#666;font-size:13px;line-height:1.6;">
-          Lock the USDT in escrow as soon as possible to keep the trade moving.<br/>
-          If you have questions, visit your Orders page.
+          Lock the USDT in escrow as soon as possible to keep the trade moving.
         </p>
 
         <hr style="border:none;border-top:1px solid #222;margin:28px 0;" />
@@ -134,8 +146,5 @@ export async function sendNewOrderEmail(
     `,
   });
 
-  if (error) {
-    logger.error({ error, to }, "Resend new-order email failed");
-    // Non-fatal — don't throw; order is already saved
-  }
+  logger.info({ to, orderId }, "New order email sent via Gmail SMTP");
 }
