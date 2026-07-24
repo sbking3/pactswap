@@ -40,23 +40,20 @@ router.post("/auth/send-signup-otp", async (req, res) => {
   await db.delete(emailOtpsTable).where(and(eq(emailOtpsTable.email, email), eq(emailOtpsTable.type, "signup")));
   await db.insert(emailOtpsTable).values({ email, code, type: "signup", expiresAt, attempts: 0 });
 
-  const resendConfigured = !!process.env.RESEND_API_KEY;
+  const emailConfigured = !!process.env.EMAIL_USER && !!process.env.EMAIL_PASS;
 
-  if (resendConfigured) {
+  if (emailConfigured) {
     try {
       await sendSignupOtpEmail(email, code, name);
       res.json({ message: "Verification code sent to your email" });
     } catch (err: any) {
-      // Resend failed (e.g. unverified sender domain, bad key) — fall back to devCode
-      logger.error({ err: err?.message, email }, "Resend send failed — returning devCode fallback");
-      res.json({
-        message: "Email delivery failed — code returned for development",
-        devCode: code,
-      });
+      const errMsg = err?.message ?? "Failed to send email";
+      logger.error({ err: errMsg, email }, "Gmail SMTP send failed");
+      res.status(500).json({ error: errMsg });
     }
   } else {
     res.json({
-      message: "OTP generated (Resend not configured — code returned for development)",
+      message: "OTP generated (email not configured — code returned for development)",
       devCode: code,
     });
   }
