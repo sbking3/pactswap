@@ -25,7 +25,6 @@ channel = "stable-25_05"
 [userenv]
 
 [userenv.shared]
-RESEND_FROM_EMAIL = "onboarding@resend.dev"
 VITE_WALLETCONNECT_PROJECT_ID = "8845b9496d446ad865c0aa2a22c4bbb8"
 ADMIN_WALLET = "0xF71C8E88aA5e433603FB76afCea62D02b9751338"
 NODE_ENV = "production"
