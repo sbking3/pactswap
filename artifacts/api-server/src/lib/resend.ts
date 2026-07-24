@@ -8,10 +8,9 @@ function getTransporter(): nodemailer.Transporter | null {
   if (!process.env.EMAIL_USER || !process.env.EMAIL_PASS) return null;
   if (!_transporter) {
     _transporter = nodemailer.createTransport({
-      service: "gmail",
-      pool: true,
-      maxConnections: 5,
-      maxMessages: Infinity,
+      host: "smtp.gmail.com",
+      port: 587,
+      secure: false,
       auth: {
         user: process.env.EMAIL_USER,
         pass: process.env.EMAIL_PASS,
