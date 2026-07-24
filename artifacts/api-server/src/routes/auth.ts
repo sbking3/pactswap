@@ -40,7 +40,7 @@ router.post("/auth/send-signup-otp", async (req, res) => {
   await db.delete(emailOtpsTable).where(and(eq(emailOtpsTable.email, email), eq(emailOtpsTable.type, "signup")));
   await db.insert(emailOtpsTable).values({ email, code, type: "signup", expiresAt, attempts: 0 });
 
-  const emailConfigured = !!process.env.EMAIL_USER && !!process.env.EMAIL_PASS;
+  const emailConfigured = !!process.env.RESEND_API_KEY;
 
   if (emailConfigured) {
     try {
@@ -48,7 +48,7 @@ router.post("/auth/send-signup-otp", async (req, res) => {
       res.json({ message: "Verification code sent to your email" });
     } catch (err: any) {
       const errMsg = err?.message ?? "Failed to send email";
-      logger.error({ err: errMsg, email }, "Gmail SMTP send failed");
+      logger.error({ err: errMsg, email }, "Resend send failed");
       res.status(500).json({ error: errMsg });
     }
   } else {
@@ -174,7 +174,7 @@ router.post("/auth/send-otp", async (req, res) => {
 
   await db.insert(emailOtpsTable).values({ email, code, expiresAt });
 
-  const emailConfigured = !!(process.env.EMAIL_USER && process.env.EMAIL_PASS);
+  const emailConfigured = !!process.env.RESEND_API_KEY;
 
   // Respond immediately — don't block on SMTP
   // If email isn't configured (dev/staging), return the code directly in the response

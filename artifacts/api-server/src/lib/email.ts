@@ -1,38 +1,13 @@
-import nodemailer from "nodemailer";
+import { sendEmail } from "../utils/email";
 import { logger } from "./logger";
 
-// Create a single pooled transporter at startup and reuse it across all sends.
-// This avoids re-establishing the TCP+TLS connection on every OTP request.
-let _transporter: nodemailer.Transporter | null = null;
-
-function getTransporter(): nodemailer.Transporter | null {
-  if (!process.env.EMAIL_USER || !process.env.EMAIL_PASS) return null;
-
-  if (!_transporter) {
-    _transporter = nodemailer.createTransport({
-      service: "gmail",
-      pool: true,          // keep connection alive between sends
-      maxConnections: 5,
-      maxMessages: Infinity,
-      auth: {
-        user: process.env.EMAIL_USER,
-        pass: process.env.EMAIL_PASS,
-      },
-    });
-  }
-
-  return _transporter;
-}
-
 export async function sendOtpEmail(to: string, code: string, name: string): Promise<void> {
-  const transporter = getTransporter();
-  if (!transporter) {
-    logger.warn("Email credentials not configured — skipping email send");
+  if (!process.env.RESEND_API_KEY) {
+    logger.warn("RESEND_API_KEY not configured — skipping email send");
     return;
   }
 
-  await transporter.sendMail({
-    from: `"PACTSWAP" <${process.env.EMAIL_USER}>`,
+  await sendEmail({
     to,
     subject: "PACTSWAP — Your Verification Code",
     html: `
