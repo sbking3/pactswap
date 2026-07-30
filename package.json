@@ -1,21 +1,31 @@
 {
-  "name": "workspace",
-  "version": "0.0.0",
-  "license": "MIT",
-  "scripts": {
-    "preinstall": "sh -c 'rm -f package-lock.json yarn.lock; case \"$npm_config_user_agent\" in pnpm/*) ;; *) echo \"Use pnpm instead\" >&2; exit 1 ;; esac'",
-    "build": "pnpm run typecheck && pnpm -r --if-present run build",
-    "typecheck:libs": "tsc --build",
-    "typecheck": "pnpm run typecheck:libs && pnpm -r --filter \"./artifacts/**\" --filter \"./scripts\" --if-present run typecheck"
-  },
+  "name": "pactswap",
   "private": true,
-  "dependencies": {
-    "@replit/connectors-sdk": "^0.4.1"
+  "packageManager": "pnpm@9.15.2",
+  "engines": {
+    "pnpm": ">=9.0.0"
   },
+  "workspaces": [
+    "artifacts/*",
+    "scripts/*",
+    "lib/*"
+  ],
   "devDependencies": {
-    "@esbuild/win32-x64": "0.27.3",
-    "esbuild": "0.27.3",
-    "prettier": "^3.9.5",
-    "typescript": "~5.9.3"
+    "@nomicfoundation/hardhat-chai-matchers": "2",
+    "@nomicfoundation/hardhat-network-helpers": "1",
+    "@nomicfoundation/hardhat-toolbox": "^2.0.2",
+    "@nomicfoundation/hardhat-verify": "2",
+    "@nomiclabs/hardhat-ethers": "2.2.3",
+    "@nomiclabs/hardhat-etherscan": "3.1.8",
+    "@typechain/ethers-v5": "10.2.0",
+    "@typechain/hardhat": "6.1.6",
+    "@types/chai": "^4.3.5",
+    "@types/mocha": "^10.0.10",
+    "chai": "^4.3.10",
+    "esbuild": "0.25.8",
+    "ethers": "5.7.2",
+    "hardhat-gas-reporter": "1",
+    "solidity-coverage": "0.8",
+    "ts-node": "^10.9.2"
   }
 }

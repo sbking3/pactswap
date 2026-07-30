@@ -1,0 +1,22 @@
+{
+  "name": "@pactswap/contracts",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "compile": "hardhat compile",
+    "test": "hardhat test",
+    "deploy": "hardhat run scripts/deploy.ts"
+  },
+  "devDependencies": {
+    "hardhat": "^2.22.18",
+    "@nomicfoundation/hardhat-toolbox": "^4.0.0",
+    "@nomicfoundation/hardhat-ethers": "^3.0.6",
+    "@typechain/ethers-v6": "^0.5.1",
+    "@typechain/hardhat": "^9.1.0",
+    "typechain": "^8.3.2",
+    "typescript": "^5.5.4",
+    "@types/node": "^22.5.5",
+    "ethers": "^6.13.4"
+  }
+}
