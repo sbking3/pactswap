@@ -1,6 +1,6 @@
 [build]
-  command = "pnpm install && pnpm run build"
-  publish = "dist"
+  command = "pnpm install --frozen-lockfile && pnpm --filter @workspace/pactswap build"
+  publish = "artifacts/pactswap/dist/public"
 
 [build.environment]
   NODE_VERSION = "20"
