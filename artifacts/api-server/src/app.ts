@@ -1,3 +1,5 @@
+import path from "node:path";
+import fs from "node:fs";
 import express, { type Express } from "express";
 import cors from "cors";
 import helmet from "helmet";
@@ -13,7 +15,23 @@ const app: Express = express();
 app.set("trust proxy", 1);
 
 // Security headers
-app.use(helmet());
+app.use(
+  helmet({
+    contentSecurityPolicy: {
+      directives: {
+        defaultSrc: ["'self'"],
+        scriptSrc: ["'self'"],
+        styleSrc: ["'self'", "'unsafe-inline'", "https://fonts.googleapis.com"],
+        fontSrc: ["'self'", "https://fonts.gstatic.com", "data:"],
+        imgSrc: ["'self'", "data:", "blob:", "https:"],
+        // Wallet connections (WalletConnect relay, BSC RPC) need outbound https/wss
+        connectSrc: ["'self'", "https:", "wss:"],
+        frameSrc: ["'self'", "https:"],
+        objectSrc: ["'none'"],
+      },
+    },
+  }),
+);
 
 // Rate limiting: 5 requests per 10 seconds per IP
 const limiter = rateLimit({
@@ -55,5 +73,16 @@ app.use("/api/auth", limiter);
 app.use("/api/kyc", limiter);
 
 app.use("/api", router);
+
+// Serve the built frontend (single-service deploy). Skipped when the build is absent.
+const webDir = process.env.WEB_DIST_DIR
+  ? path.resolve(process.env.WEB_DIST_DIR)
+  : path.resolve(process.cwd(), "../pactswap/dist/public");
+if (fs.existsSync(path.join(webDir, "index.html"))) {
+  app.use(express.static(webDir, { index: false, maxAge: "1h" }));
+  app.get(/^\/(?!api\/).*/, (_req, res) => {
+    res.sendFile(path.join(webDir, "index.html"));
+  });
+}
 
 export default app;

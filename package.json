@@ -26,6 +26,13 @@
     "ethers": "5.7.2",
     "hardhat-gas-reporter": "1",
     "solidity-coverage": "0.8",
-    "ts-node": "^10.9.2"
+    "ts-node": "^10.9.2",
+    "typescript": "5.9"
+  },
+  "scripts": {
+    "build": "pnpm --filter @workspace/pactswap build && pnpm --filter @workspace/api-server build",
+    "start": "pnpm --filter @workspace/api-server start",
+    "typecheck": "tsc -b lib/db lib/api-zod lib/api-client-react && pnpm --filter @workspace/api-server typecheck && pnpm --filter @workspace/pactswap typecheck",
+    "db:push": "pnpm --filter @workspace/db push"
   }
 }
