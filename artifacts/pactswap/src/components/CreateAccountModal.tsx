@@ -1,3 +1,4 @@
+import { apiUrl } from "@/lib/api";
 import { useState } from "react";
 import {
   Dialog,
@@ -18,7 +19,7 @@ function shortAddr(addr: string) {
 }
 
 async function apiPost(path: string, body: object) {
-  const res = await fetch(path, {
+  const res = await fetch(apiUrl(path), {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(body),

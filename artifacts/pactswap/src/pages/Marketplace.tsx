@@ -1,3 +1,4 @@
+import { apiUrl } from "@/lib/api";
 import { useState } from "react";
 import { Link, useLocation } from "wouter";
 import { ethers } from "ethers";
@@ -140,7 +141,7 @@ export default function Marketplace() {
       // The seller will lock USDT on-chain using this same ID from the order detail page.
       const escrowId = ethers.id(crypto.randomUUID());
 
-      const res = await fetch("/api/orders/initiate", {
+      const res = await fetch(apiUrl("/api/orders/initiate"), {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -233,7 +234,7 @@ export default function Marketplace() {
         offerId: selectedOffer.id,
       };
 
-      const res = await fetch("/api/orders", {
+      const res = await fetch(apiUrl("/api/orders"), {
         method: "POST",
         headers: {
           "Content-Type": "application/json",

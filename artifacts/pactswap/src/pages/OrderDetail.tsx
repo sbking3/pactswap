@@ -1,3 +1,4 @@
+import { apiUrl } from "@/lib/api";
 import { useState, useEffect } from "react";
 import { useRoute, Link } from "wouter";
 import {
@@ -211,7 +212,7 @@ export default function OrderDetail() {
 
       // Tell the server to record the lock tx
       const token = localStorage.getItem("pactswap_token");
-      const res = await fetch(`/api/orders/${order.id}/lock`, {
+      const res = await fetch(apiUrl(`/api/orders/${order.id}/lock`), {
         method: "PATCH",
         headers: {
           "Content-Type": "application/json",
