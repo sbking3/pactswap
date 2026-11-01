@@ -1,3 +1,4 @@
+import { apiUrl } from "@/lib/api";
 import { useState, useEffect, useRef } from "react";
 import { useLocation, Link } from "wouter";
 import { useAuth } from "@/contexts/AuthContext";
@@ -11,7 +12,7 @@ import { WalletGuideModal } from "@/components/WalletGuideModal";
 
 async function apiPost(path: string, body: object) {
   const token = localStorage.getItem("pactswap_token");
-  const res = await fetch(path, {
+  const res = await fetch(apiUrl(path), {
     method: "POST",
     headers: {
       "Content-Type": "application/json",

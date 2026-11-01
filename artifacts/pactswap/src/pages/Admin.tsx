@@ -1,3 +1,4 @@
+import { apiUrl } from "@/lib/api";
 import { useState, useEffect } from "react";
 import { useLocation } from "wouter";
 import { useAuth } from "@/contexts/AuthContext";
@@ -58,11 +59,10 @@ import { releaseEscrow, refundEscrow } from "@/lib/contract";
 
 const ADMIN_WALLET = "0xf71c8e88aa5e433603fb76afcea62d02b9751338";
 
-const BASE = import.meta.env.BASE_URL.replace(/\/$/, "");
 
 async function apiFetch(path: string, opts?: RequestInit) {
   const token = localStorage.getItem("pactswap_token");
-  const res = await fetch(`${BASE}${path}`, {
+  const res = await fetch(apiUrl(path), {
     ...opts,
     headers: {
       "Content-Type": "application/json",
