@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { Link, useLocation } from "wouter";
 import { useAuth } from "@/contexts/AuthContext";
+import { useSupabaseAuth } from "@/contexts/SupabaseAuthContext";
 import PactSwapLogo from "@/components/PactSwapLogo";
 import SecurityBanner from "@/components/SecurityBanner";
 import { Menu, X, User as UserIcon, LogOut, Activity, Settings, Plus, List, ShoppingCart, LayoutDashboard, Store } from "lucide-react";
@@ -19,6 +20,7 @@ const ADMIN = "0xf71c8e88aa5e433603fb76afcea62d02b9751338";
 
 export function Layout({ children }: { children: React.ReactNode }) {
   const { user, logout } = useAuth();
+  const { sbUser, username: sbUsername, signOut } = useSupabaseAuth();
   const [, setLocation] = useLocation();
   const logoutMutation = useLogout();
   const [mobileOpen, setMobileOpen] = useState(false);
@@ -31,6 +33,17 @@ export function Layout({ children }: { children: React.ReactNode }) {
       },
     });
   };
+
+  const handleSbLogout = async () => {
+    await signOut();
+    setLocation("/");
+  };
+
+  const sbNavLinks = [
+    { href: "/marketplace",  label: "Marketplace",  icon: ShoppingCart },
+    { href: "/orders",       label: "Trade",        icon: List },
+    { href: "/offers/create",label: "Create Offer", icon: Plus },
+  ];
 
   const navLinks = user ? [
     { href: "/dashboard",    label: "Dashboard",    icon: Activity },
@@ -55,7 +68,23 @@ export function Layout({ children }: { children: React.ReactNode }) {
           </Link>
 
           <div className="flex items-center gap-3">
-            {user ? (
+            {!user && sbUser ? (
+              <>
+                <nav className="hidden md:flex items-center gap-6 text-sm font-medium">
+                  {sbNavLinks.map(({ href, label, icon: Icon }) => (
+                    <Link key={href} href={href} className="transition-colors flex items-center gap-1.5 text-muted-foreground hover:text-primary">
+                      <Icon className="w-4 h-4" /> {label}
+                    </Link>
+                  ))}
+                </nav>
+                <span data-testid="sb-user" className="text-sm font-medium max-w-[200px] truncate">
+                  {sbUsername ? `${sbUsername} · ${sbUser.email}` : sbUser.email}
+                </span>
+                <Button variant="outline" onClick={handleSbLogout} className="border-border/50">
+                  <LogOut className="mr-2 h-4 w-4" /> Logout
+                </Button>
+              </>
+            ) : user ? (
               <>
                 {/* Desktop nav */}
                 <nav className="hidden md:flex items-center gap-6 text-sm font-medium">

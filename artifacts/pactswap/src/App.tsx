@@ -3,11 +3,13 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { Toaster } from 'sonner';
 
 import { AuthProvider } from '@/contexts/AuthContext';
+import { SupabaseAuthProvider } from '@/contexts/SupabaseAuthContext';
 import { Layout } from '@/components/Layout';
 import { ProtectedRoute } from '@/components/ProtectedRoute';
 
 import Home from '@/pages/Home';
 import Login from '@/pages/Login';
+import WalletLogin from '@/pages/WalletLogin';
 import Signup from '@/pages/Signup';
 import Marketplace from '@/pages/Marketplace';
 import Dashboard from '@/pages/Dashboard';
@@ -39,6 +41,7 @@ function Routes() {
       <Route path="/marketplace" component={Marketplace} />
       <Route path="/welcome" component={Home} />
       <Route path="/login" component={Login} />
+      <Route path="/login/wallet" component={WalletLogin} />
       <Route path="/signup" component={Signup} />
       <Route path="/users/:walletAddress" component={UserProfile} />
 
@@ -59,6 +62,7 @@ function App() {
   const base = import.meta.env.BASE_URL.replace(/\/$/, '');
   return (
     <QueryClientProvider client={queryClient}>
+      <SupabaseAuthProvider>
       <AuthProvider>
         <WouterRouter base={base}>
           <Switch>
@@ -73,6 +77,7 @@ function App() {
         </WouterRouter>
         <Toaster richColors position="top-right" />
       </AuthProvider>
+      </SupabaseAuthProvider>
     </QueryClientProvider>
   );
 }
